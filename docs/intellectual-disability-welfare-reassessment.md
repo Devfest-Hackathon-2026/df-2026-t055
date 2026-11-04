@@ -2,7 +2,8 @@
 
 - 調査日: 2026年11月5日
 - 状態: 開発案は未選定。比較実験の候補を2件残す。
-- 前回の記録: [8案と選定しなかった理由](intellectual-disability-welfare-review.md)
+- 前回の記録: [8案と選定の経緯](intellectual-disability-welfare-review.md)
+- その後の判断: [11番の作業手順の提示](11-personalized-task-guidance.md)は検討候補として残す扱いに変更した。本書の比較結果は変更前に行った2回目の調査の記録である。
 
 ## 結論
 
