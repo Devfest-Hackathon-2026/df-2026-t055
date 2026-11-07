@@ -36,7 +36,7 @@
 
 撮影担当は11/8午前に90〜150秒の手本を1本撮り、各動作と声かけが入ったことを再生して判定する。動画の必要性は第8節の同一作業比較で判定する。封筒へのチラシ封入は写真数枚との比較用に残す。
 
-MVPは1事業所相当のデモ環境、1作業、架空の本人プロフィール2件、職員・本人・新人の3画面系統とする。本人向けは写真と短文、一度に1工程。自動音声生成、診断からの推定、作業速度による採点は対象外とする。
+MVPは1事業所相当のデモ環境、1作業、架空の本人プロフィール2件、職員・本人・新人の3画面系統とする。本人向けは写真と短文、一度に1工程。読み上げ音声は、承認のタイミングで承認済み短文から事前生成する形に限り、「あれば枠」の筆頭として扱う。実行時にその都度生成はしない。診断からの推定、作業速度による採点は対象外とする。
 
 ## 2. 画面遷移と中核の操作
 
@@ -55,7 +55,7 @@ MVPは1事業所相当のデモ環境、1作業、架空の本人プロフィー
 ### 本人：選ぶ・進める・支援を求める
 
 1. 職員が本人用端末で本人アカウントをログイン済みにし、`/me`を開く。職員が割り当てた承認版の作業名と「はじめる」が返る。割当がなければ「職員をよんでください」と表示する。
-2. 本人が「はじめる」を押すと、セッションと固定の版IDを作成し、`/me/sessions/{sessionId}`へ進む。大きな写真、短文、「もどる」「つぎへ」、現在位置「2 / 9」を表示する。最終工程は「おわる」。自動送りは使わない。
+2. 本人が「はじめる」を押すと、セッションと固定の版IDを作成し、`/me/sessions/{sessionId}`へ進む。大きな写真、短文、「もどる」「つぎへ」、現在位置「2 / 9」を表示する。最終工程は「おわる」。自動送りは使わない。本人のプロフィールで音声ありが選ばれている場合、各工程の画面に読み上げの再生ボタンを表示し、承認版に含まれる音声を再生する。
 3. すべての本人画面で「手伝って」「やめる」を固定表示する。「手伝って」で進行を止め、「職員をよんでいます」を表示し、支援要求を保存する。職員が対応後、本人の「つづける」で同じ工程に戻る。
 4. 「やめる」は確認ダイアログを挟まず、直ちに写真・手順と進行ボタンを閉じて「作業をやめました」を出す。端末上で即時停止し、停止イベントを送信する。停止したセッションは再開しない。再開希望は職員と相談して新規セッションを作る。
 5. 通信失敗でも停止状態を保つ。支援要求の送信失敗時は「近くの職員をよんでください」と表示し、端末内の送信待ちイベントを再送する。送信成功前に「職員に届きました」と表示しない。
@@ -75,9 +75,9 @@ Firestore Native modeに構造化データ、非公開Cloud Storageに動画・�
 | コレクション | 主なフィールド | 保存と更新の約束 |
 | --- | --- | --- |
 | `members` | `uid, orgId, role: staff / learner / newcomer, learnerId?` | 管理用スクリプトで登録。ブラウザからroleを書き換えられない |
-| `learners` | `displayName, preferences:{sentenceLength, splitHints}, enteredBy` | 架空名を使用。希望と職員入力の説明方法だけを保存。診断名は収集しない |
+| `learners` | `displayName, preferences:{sentenceLength, splitHints, audioGuidance（音声のあり／なし）}, enteredBy` | 架空名を使用。希望と職員入力の説明方法だけを保存。診断名は収集しない |
 | `tasks` | `title, videoAssetId, status: uploading / ready, createdBy` | 動画実体の検査完了でready |
-| `assets` | `kind: video / image, objectPath, generation, mimeType, durationMs?, sourceVideoId?, frameMs?, visibility: staff / approved, releaseId?` | パスはAPI内部用。承認画像は版専用コピーを作り、上書きしない |
+| `assets` | `kind: video / image / audio, objectPath, generation, mimeType, durationMs?, sourceVideoId?, frameMs?, visibility: staff / approved, releaseId?` | パスはAPI内部用。承認画像は版専用コピーを作り、上書きしない。audioは承認済み短文から生成した読み上げ音声とし、releaseIdにひも付く承認版専用資産とする |
 | `generationJobs` | `taskId, draftId, status, attempt, modelId, promptVersion, errorCode?, leaseUntil?` | ジョブごとに結果を分離。生成の再試行は新ジョブを作る |
 | `drafts` | `taskId, learnerId, jobId, revision, status, aiProposal, editedSteps, reviewChecks, updatedBy` | 下書き専用。AI原文と職員編集値を別フィールドに保つ |
 | `releases` | `taskId, learnerId, sourceDraftId, sourceRevision, version, learnerSteps[], staffGuide[], approvedBy, approvedAt, contentHash` | 承認時に新規作成。本文の更新・削除APIを設けない |
@@ -87,7 +87,7 @@ Firestore Native modeに構造化データ、非公開Cloud Storageに動画・�
 | `supportRequests` | `sessionId, eventId, kind: help / stop, status: open / acknowledged, acknowledgedBy?, acknowledgedAt?` | 職員の支援一覧用。停止イベントにも要求を作る |
 | `handoverReads` | `releaseId, newcomerUid, readAt` | 承認版を読んだ記録 |
 
-`learnerSteps`は`{stepId, order, imageAssetId, text, visibleCaution}`、`staffGuide`は`{stepId, sourceStartMs, sourceEndMs, verifiedObservation, verifiedSpeech, coaching, completionCheck}`とする。本人用レスポンスに`staffGuide`を含めない。
+`learnerSteps`は`{stepId, order, imageAssetId, audioAssetId?, text, visibleCaution}`、`staffGuide`は`{stepId, sourceStartMs, sourceEndMs, verifiedObservation, verifiedSpeech, coaching, completionCheck}`とする。本人用レスポンスに`staffGuide`を含めない。
 
 ### 状態遷移
 
@@ -167,6 +167,8 @@ Vertex AI経由のGoogle Gen AI SDKを使う。入力は非公開Storageの動�
 API側でも同じスキーマ、文字数、時刻、参照先を検査する。違反・空出力・安全フィルターによる停止はジョブfailedとし、本人向けデータを一切作らない。意味の正しさは職員の照合で判断する。モデルID、プロンプト版、生成所要時間、修正件数を記録する。
 
 モデルの具体ID・利用ロケーション・入出力単価は **AI担当が11/8午前にプロジェクトの利用可能モデルと公式料金表で決める**。選定条件は動画・音声入力、構造化JSON、手本1本の成功、予算内のFlash系モデル。決定値を環境設定と検証記録に固定し、失敗時に別モデルへ自動切替しない。
+
+読み上げ音声はVertex AIのGemini TTS（モデル例：`gemini-2.5-flash-tts`）で承認処理の一部として生成し、入力は承認済みの短文のみとする。未承認のテキストからは音声を生成しない。本人へ配信できるのは承認版に含まれる音声だけとする。使用モデルIDと単価は、AI担当が11/8午前に行うモデル決定に含める。
 
 ### 本人へ下書きを漏らさない境界
 
@@ -254,7 +256,7 @@ MagnusCardsの機能差は比較担当（検証・提出担当）が11/8午後�
 
 | 優先度 | アイデア | 担当と締切・切る基準 |
 | --- | --- | --- |
-| P1 | 職員が録音した短い読み上げ | フロント担当が11/9昼までに着手可否を決める。承認版専用の音声保存・承認が必要。自動再生や未承認音声が残るなら切る |
+| P1 | 承認済み短文のTTS事前生成による読み上げ | AI担当が11/9昼までに着手可否を決める。未承認テキストの音声が生成・配信されうる実装になるなら切る。本人画面の完成を遅らせるなら切る |
 | P2 | 次回のための「わかりやすかった／変えたい」記録 | 体験担当が11/9昼までに文言を決める。回答で表示を自動変更しない。支援要求の操作を妨げるなら切る |
 | P3 | 紙に印刷する承認済み手順 | フロント担当が11/9昼までに着手可否を決める。版IDと承認日を付ける。本人画面の完成を遅らせるなら切る |
 
