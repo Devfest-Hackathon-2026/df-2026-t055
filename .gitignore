@@ -1,34 +1,33 @@
-# 秘密情報（コミットしない）
-.env
-.env.*
+!.dev.vars.example
 !.env.example
+!.vscode/extensions.json
+# OS とエディタ
+# 依存関係とビルドの成果物
+# 秘密情報（コミットしない）
+*.key
+*.log
+*.p12
+*.pem
+*.pyc
+.DS_Store
 .dev.vars
 .dev.vars.*
-!.dev.vars.example
-*.pem
-*.key
-*.p12
-service-account*.json
-credentials*.json
-google-services.json
-GoogleService-Info.plist
-
-# 依存関係とビルドの成果物
-node_modules/
-dist/
-build/
-out/
-.next/
-.wrangler/
-__pycache__/
-*.pyc
-.venv/
-venv/
-
-# OS とエディタ
-.DS_Store
-Thumbs.db
+.env
+.env.*
 .idea/
+.local/
+.next/
+.venv/
 .vscode/*
-!.vscode/extensions.json
-*.log
+.wrangler/
+GoogleService-Info.plist
+Thumbs.db
+__pycache__/
+build/
+credentials*.json
+dist/
+google-services.json
+node_modules/
+out/
+service-account*.json
+venv/
