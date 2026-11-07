@@ -95,7 +95,7 @@ MVPは1組織相当のデモ環境、1作業、架空の本人プロフィール
 5. `/staff/drafts/{draftId}/review`：登録時の希望を初期値に、作業ごとの表示方法、1工程1文の短文、写真と代替テキスト、注意点、職員用の声かけを編集する。工程数は上限20件の範囲で調整する。写真は原動画から切り出し、手の動きや順序が分かるものを選ぶ。必要な動きが写っていなければ追加撮影する。
 6. 同画面：選んだ表示方法で本人画面をプレビューし、各工程の「動画照合済み」「写真・説明確認済み」と、全体の「本人への提示内容確認済み」をチェックする。写真のみの場合は、写真の順序と、文字を表示しない注意点をどう伝えるかも確認する。確認欄の初期値はすべてfalse。プレビューは職員の認証範囲に置く。
 7. 「この内容を承認」で内容のスナップショットを新規保存する。承認者、時刻、版IDが返る。「本人の端末へ渡す」で、その本人の作業に次回用の版を割り当てる。
-8. 修正は新しい下書きから始める。承認済み本文の編集APIは作らない。新版の承認後、職員が次回の開始版に指定する。実行中の本人セッションは元の版を使い続ける。
+8. 承認済みマニュアルの「コピーして直す」を押すと、その内容を新しい編集用下書きにコピーする。職員は文章や写真、表示方法を手作業で直し、プレビューと確認を経て新しい版を承認する。例えば「はしをそろえる」を「赤い線にあわせる」に直すために、動画解析をやり直す必要はない。新版の承認後、職員が次回の開始版に指定する。実行中の本人セッションは元の版を使い続ける。
 9. `/staff/support`：支援一覧を開いている同じ所属の職員に、WebSocketで呼出しを通知する。職員が「担当します」を押すと担当者が決まり、ほかの職員の一覧にも担当済みと表示する。到着した担当職員が「対応を始める」を押して支援する。支援後、本人に再開の希望を確かめて「対応を終えてつづける」を押すと、本人のiPadが同じ工程の作業画面へ戻る。停止通知は確認済みにできる。デモでは職員役が同じ机で待機する。
 
 職員は自分のアカウントで開いた支援画面から操作し、本人はiPadの作業画面を使い続ける。担当者の決定、支援の開始・完了、作業再開を両画面で共有する。同じ呼出しを複数の職員が引き受けようとした場合、サーバーは最初に保存できた職員を担当者とし、ほかの職員には担当済みを返す。担当職員の画面で「対応完了」だけを記録し、本人が自分で「つづける」を選ぶこともできる。
@@ -122,6 +122,12 @@ MVPは1組織相当のデモ環境、1作業、架空の本人プロフィール
 - 本人別の作業一覧に、作業名、次回用の承認版、未反映の記録件数、生成・確認状態を表示する。職員が同じ本人・作業の記録を選び、「記録をもとに更新」で非同期生成を開始する。生成失敗時も記録と現在の割当を保ち、職員が再試行できる。
 - 生成後は「職員の確認待ち」とし、変更前後、参照した記録、必要な原動画の区間を並べる。職員が修正し、反映した記録を明示して承認した後に、次回用の版として割り当てる。
 - 他の作業にも使う説明方法は、本人の希望を確かめ、職員が共通プロフィールへ明示的に登録する。個別作業の記録はその作業の改善に使う。
+
+#### 承認版を手作業で直す
+
+サーバーはコピー元の本人・作業・工程・写真・教え方・提示設定を新しい下書きへ引き継ぎ、確認チェックをすべてfalseにする。元の承認版とその写真は保持する。職員が手作業用の下書きを開くと、生成ジョブを作らずに編集画面を表示する。職員は初回生成と同じ操作で編集・照合・承認する。画面には「承認版のコピー」と表示し、生成待ちの表示やジョブのポーリングを行わない。コピーと手作業の修正は、動画解析の生成試行10回に数えない。
+
+承認時にはコピー元の版IDを新しい版へ残す。元版で採用済みの支援記録は継承元をたどって確認し、手作業の下書きに新たな記録の採用IDを追加する操作は含めない。短文を直した工程の古い読み上げ音声は引き継がず、読み上げを使う場合は変更後の短文に対応する承認済み音声を用意する。本人が新しい内容を見るのは、新版の承認と割当を経て次回の作業を始めたときとする。
 
 ### 本人：選ぶ・進める・支援を求める
 
@@ -156,7 +162,7 @@ Firestore Native modeに構造化データ、非公開Cloud Storageに動画・�
 | `tasks` | `title, videoAssetId, status: uploading / ready, createdBy` | 動画実体の検査完了でready |
 | `assets` | `kind: video / image / audio, objectPath, generation, mimeType, durationMs?, sourceVideoId?, frameMs?, visibility: staff / approved, releaseId?` | パスはAPI内部用。承認画像は版専用コピーを作り、上書きしない。audioは承認済み短文から生成した読み上げ音声とし、releaseIdにひも付く承認版専用資産とする |
 | `generationJobs` | `taskId, draftId, status, attempt, modelId, promptVersion, inputSnapshot, errorCode?, leaseUntil?` | 受付時の表示設定・説明方法・入力を固定。改善の場合は元の承認版と選択した記録の版も固定する。再試行は新ジョブ |
-| `drafts` | `taskId, learnerId, jobId, revision, status, aiProposal, editedSteps, displayMode, audioGuidance, reviewChecks, appliedSupportRecordRefs?, updatedBy` | AI原文と職員編集値を分離。ジョブに保存した生成時の設定と、職員が編集・確認した提示設定を区別する |
+| `drafts` | `taskId, learnerId, jobId?, sourceReleaseId?, revision, status, aiProposal?, editedSteps, displayMode, audioGuidance, reviewChecks, appliedSupportRecordRefs?, updatedBy` | AI生成ではjobIdとaiProposalを持つ。手作業のコピーではsourceReleaseIdを持ち、jobIdとaiProposalは作らない。AI原文と職員編集値を分離し、生成時と編集後の設定を区別する |
 | `releases` | `taskId, learnerId, sourceDraftId, sourceRevision, sourceReleaseId?, appliedSupportRecordRefs?, version, displayMode, audioGuidance, learnerSteps[], staffGuide[], approvedBy, approvedAt, contentHash` | 承認時に新規作成。表示方法・読み上げの希望・採用した記録の版も固定する。本文の更新・削除APIを設けない |
 | `assignments` | `learnerId, taskId, releaseId, assignedBy, updatedAt` | 次回開始版へのポインタ。承認済みかつ本人ID一致の版だけを指す |
 | `sessions` | `learnerId, releaseId, status, stepIndex, revision, activeSupportRequestId?, startedAt, endedAt?` | 開始時に版を固定。支援待ちでは対象の要求IDを保存する。進行はイベントと同一トランザクションで更新 |
@@ -177,7 +183,7 @@ Firestore Native modeに構造化データ、非公開Cloud Storageに動画・�
 ### 状態遷移
 
 - 生成ジョブ：`queued → running → succeeded | failed`。Cloud Tasksの再配送は同じジョブを検査し、成功済みなら終了。実行中はリースを使い、切れたリースだけを取り直す。試行上限は3回。
-- 下書き：`generating → editing → approved`、生成失敗は`generating → failed`。承認時に編集を閉じる。再生成は別draftIdとし、旧下書きと承認版を保存する。
+- 下書き：AI生成は`generating → editing → approved`、生成失敗は`generating → failed`。承認版から手作業用にコピーすると、新しいdraftIdをeditingで作る。承認時に編集を閉じる。再生成も別draftIdとし、旧下書きと承認版を保存する。
 - 承認処理：版専用の画像を先に用意し、トランザクションで下書きrevision・確認欄を検査してrelease作成とdraftのapproved化を同時実行する。競合は409。失敗して残った画像は職員にも本人にも配信せず、保管期限で消す。[Firestoreのトランザクション仕様](https://cloud.google.com/firestore/native/docs/manage-data/transactions)
 - セッション：`active → waiting_help → active`、`active | waiting_help → stopped`、`active → completed`。`stopped`と`completed`は終端。停止の再送は成功扱いとし、停止後の進行イベントは409で拒否する。再開は担当職員の「対応を終えてつづける」、または対応完了後の本人の「つづける」で行う。再開時はactiveSupportRequestIdを外し、版と工程は保つ。
 - 支援要求：`help` は `open → assigned → in_progress → acknowledged`（未担当・担当決定・対応中・対応完了）、`stop` は `open → acknowledged`（停止通知の確認）。担当決定はトランザクションで行う。担当職員だけがhelpの開始・完了・職員側からの再開を操作できる。同じ職員の担当決定・開始・完了の再送では元の職員と時刻を保つ。記録の入力や生成の状態は要求と分ける。
@@ -207,6 +213,7 @@ Cloud Storageは`source/{orgId}/{taskId}/...`、`draft/{orgId}/{draftId}/...`、
 | `PATCH /drafts/{id}` | 職員 | `{expectedRevision,editedSteps,reviewChecks,displayMode?,audioGuidance?,appliedSupportRecordRefs?,correctionReason?}` → `{revision,reviewChecks}`。内容を変更した場合は第2節の規則で確認チェックを外し、保存後のチェック状態を返す。編集内容の差分があれば修正履歴も保存し、参考メモの生成を非同期で受け付ける。確認チェックだけの変更や、競合で保存できなかった修正からは履歴を作らない |
 | `POST /drafts/{id}/frames` | 職員 | `{frameMs}` → `{imageAssetId}`。サーバーのffmpegで原動画から静止画を切り出す |
 | `POST /drafts/{id}/approve` | 職員 | `{expectedRevision,approvalRequestId}` → `{releaseId,version}`。二重送信は同じ版を返す |
+| `POST /releases/{id}/drafts` | 職員 | `{clientRequestId}` → 201 `{draftId,status:"editing",revision}`。同じ所属の承認版から編集用下書きを作る。本人・作業・コピーする内容はサーバーが元版から確定し、確認チェックをすべてfalseにする。同じキーの再送は同じ下書きを返す |
 | `PUT /assignments/{learnerId}/{taskId}` | 職員 | `{releaseId}` → 次回開始版の割当 |
 | `GET /me/assignments` | 本人 | 作業名・割当版IDのみ。下書きがあっても応答は変えない |
 | `POST /me/sessions` | 本人 | `{taskId,clientRequestId}` → `{sessionId,releaseId,displayMode,audioGuidance,steps}`。固定した版の許可フィールドで組み立てる |
@@ -226,6 +233,8 @@ Cloud Storageは`source/{orgId}/{taskId}/...`、`draft/{orgId}/{draftId}/...`、
 変更系APIはJSONとOriginを検査する。本人のstopはexpectedRevisionの一致より停止を優先し、同じセッションの進行操作と競合しても、止める操作を失わせない。ブラウザは停止状態を先に保持し、再読み込み後も送信完了まで再開しない。
 
 同じ `clientRequestId` で同じ改善要求を再送した場合は元のジョブを返し、異なる内容でのキーの再利用は409で拒否する。新規受付では、元の承認版が対象の本人・作業の次回版であることと、選択された記録が同じ所属・本人・作業の最新revisionであることを検査する。変わっていれば409で再選択を求める。承認時は、実際に反映した記録のIDとrevisionがジョブで参照した範囲内にあることを検査する。
+
+手作業用のコピーを承認するとき、サーバーは生成ジョブの検査を適用せず、コピー元の所属・本人・作業が下書きと一致するかを検査する。新しい承認版のsourceReleaseIdにはコピー元を保存する。appliedSupportRecordRefsへの新規追加は422で拒否する。工程の照合、写真・代替テキスト、提示内容の確認と、版専用資産の作成はAI生成の下書きと同じ条件で行う。
 
 ### 支援中のWebSocket連携
 
@@ -363,6 +372,7 @@ MagnusCardsの機能差は比較担当（検証・提出担当）が11/8午後�
 ### 本人向け表示と支援記録の受入条件
 
 - **編集後の再確認。** 確認済みの下書きで写真・工程文を変更すると、対象工程の写真・説明確認と全体の提示確認が外れる。工程の区切りを変えた場合は動画照合も外れる。同じ保存要求でtrueを送っても解除され、未確認のままでは承認できない。表示方法の変更、変更のない工程の確認保持、再確認後の承認を試す。
+- **手作業による修正。** 承認版のコピーから文章・写真・表示方法を直して再承認し、次回用に割り当てられる。生成ジョブを作らず、動画解析の試行上限に達した後も使える。同じコピー要求の再送、別所属・本人・新人からのアクセス拒否、確認チェックの初期化、コピー元と実行中の本人画面が変わらないことを確認する。
 - **プロフィールと写真のみ表示。** 職員が本人と希望を確認して登録し、写真のみの下書き・プレビュー・承認・割当から本人表示と新人の引き継ぎまで通す。写真不足、工程上限、未確認の設定、注意の伝達と代替テキストを確認する。写真と短文および読み上げを併用した場合も試す。プロフィール変更や新版の割当後も実行中の表示方法と内容が変わらないことを確認する。
 - **データ境界。** 別所属や本人・新人が職員用のプロフィールや支援記録へアクセスすると拒否される。任意項目を消せること、職員向けの特性や記録が本人用応答とモデル入力に混入しないこと、選択した記録の確認済み要約だけを改善に使用することを確認する。
 - **ピクトグラム。** 本人が「手伝って」と「やめる」の目的と押した後の状態を、文字を読むことに頼らず確かめられるかを見る。小さい画面、拡大、色の見え方、キーボード、スクリーンリーダー、絵の読み込み失敗、通信断で操作を確認する。本人による意味の確認と、支援要求・再開・即時停止・完了の動作確認を分けて記録する。
