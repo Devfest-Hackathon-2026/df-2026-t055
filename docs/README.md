@@ -17,7 +17,6 @@
 ## 設計変更の候補
 
 - [職員が音声でもAIへ修正を依頼する](staff-voice-correction-proposal.md)：下書きへの修正依頼を、テキストと音声で入力する追加候補。
-- [支援中のつまずきを記録し、後から手順を改善する](support-feedback-improvement-proposal.md)：支援記録を蓄積し、本人別の手順一覧から非同期で改善する追加候補。
 
 ## 不採択案
 
