@@ -18,9 +18,12 @@
 
 作業手順書の前例や公的資料は、[11Aの参考資料・前例](11A-reference-materials.md)にまとめています。
 
-## 設計変更の候補
+## 設計変更の原資料
 
 - [すべてのテキスト入力欄で音声入力を使えるようにする（a11y）](voice-input-accessibility-proposal.md)：全画面の文字入力・編集で、キーボードと音声を選べるようにする設計変更案。
+- [支援中のつまずきを記録し、後から手順を改善する](support-feedback-improvement-proposal.md)
+- [本人向けの操作をピクトグラムで伝える](pictogram-controls-proposal.md)
+- [利用者の特性を登録し、写真のみの作業手順を選べるようにする](learner-profile-photo-guidance-proposal.md)
 
 ## 不採択案
 
