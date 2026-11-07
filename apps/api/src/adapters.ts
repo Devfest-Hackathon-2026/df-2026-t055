@@ -115,6 +115,6 @@ export function seed(db: MemoryRepository) {
         }));
     for (const [learnerId, displayName, splitHints] of [['a', 'Aさん', '9工程'], ['b', 'Bさん', '折るを細分化した11工程']])
         db.put('learners', doc('demo', {
-            id: learnerId, displayName, preferences: { sentenceLength: 40, splitHints, audioGuidance: false }, enteredBy: 'staff'
+            id: learnerId, displayName, preferences: { sentenceLength: 40, splitHints, audioGuidance: learnerId === 'b' }, enteredBy: 'staff'
         }));
 }

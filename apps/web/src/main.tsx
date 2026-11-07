@@ -16,9 +16,10 @@ function go(path: string) {
     history.pushState({}, '', path);
     window.dispatchEvent(new PopStateEvent('popstate'));
 }
-function Asset({ id, video = false, startMs = 0, endMs }: {
+function Asset({ id, video = false, audio = false, startMs = 0, endMs }: {
     id: string;
     video?: boolean;
+    audio?: boolean;
     startMs?: number;
     endMs?: number;
 }) {
@@ -40,7 +41,7 @@ function Asset({ id, video = false, startMs = 0, endMs }: {
                 URL.revokeObjectURL(object);
         };
     }, [id]);
-    return url ? video ? <video key={`${id}:${startMs}:${endMs}`} src={`${url}#t=${startMs / 1000}${endMs === undefined ? '' : ',' + endMs / 1000}`} controls preload="metadata"/> : <img src={url} alt="この工程の手元の写真"/> : <div className="placeholder">写真・動画を読み込み中</div>;
+    return url ? audio ? <audio key={id} src={url} controls preload="metadata" aria-label="手順の読み上げ"/> : video ? <video key={`${id}:${startMs}:${endMs}`} src={`${url}#t=${startMs / 1000}${endMs === undefined ? '' : ',' + endMs / 1000}`} controls preload="metadata"/> : <img src={url} alt="この工程の手元の写真"/> : <div className="placeholder">写真・動画を読み込み中</div>;
 }
 function App() {
     const [path, setPath] = useState(location.pathname);
@@ -331,6 +332,6 @@ function Learner({ uid, path, action }: {
                 await api(`/me/sessions/${sessionId}/events`, 'POST', { clientEventId: crypto.randomUUID(), expectedRevision: fresh.revision, type: 'resume' });
                 clearWaiting(localStorage, key);
                 setSession(await api(`/me/sessions/${sessionId}`));
-            })}>つづける</button></section> : session?.status === 'completed' ? <section><h1>おわりました</h1><p>職員をよんでください</p></section> : session ? <section><p className="position">{session.stepIndex + 1} / {session.steps.length}</p><Asset id={session.steps[session.stepIndex].imageAssetId}/><h1>{session.steps[session.stepIndex].text}</h1><p>{session.steps[session.stepIndex].visibleCaution}</p><div className="controls"><button disabled={busy || session.stepIndex === 0} onClick={() => void action(() => event('back'))}>もどる</button><button className="primary" disabled={busy} onClick={() => void action(() => event(session.stepIndex === session.steps.length - 1 ? 'complete' : 'next'))}>{session.stepIndex === session.steps.length - 1 ? 'おわる' : 'つぎへ'}</button></div></section> : <p>読み込み中です</p>}<div className="safety"><button className="help" onClick={() => requestSafety('help')} disabled={safety.stopped || session?.status === 'stopped'}>手伝って</button><button className="stop" onClick={() => requestSafety('stop')}>やめる</button></div></div>;
+            })}>つづける</button></section> : session?.status === 'completed' ? <section><h1>おわりました</h1><p>職員をよんでください</p></section> : session ? <section><p className="position">{session.stepIndex + 1} / {session.steps.length}</p><Asset id={session.steps[session.stepIndex].imageAssetId}/><h1>{session.steps[session.stepIndex].text}</h1>{session.steps[session.stepIndex].audioAssetId && <Asset key={session.steps[session.stepIndex].audioAssetId} id={session.steps[session.stepIndex].audioAssetId!} audio/>}<p>{session.steps[session.stepIndex].visibleCaution}</p><div className="controls"><button disabled={busy || session.stepIndex === 0} onClick={() => void action(() => event('back'))}>もどる</button><button className="primary" disabled={busy} onClick={() => void action(() => event(session.stepIndex === session.steps.length - 1 ? 'complete' : 'next'))}>{session.stepIndex === session.steps.length - 1 ? 'おわる' : 'つぎへ'}</button></div></section> : <p>読み込み中です</p>}<div className="safety"><button className="help" onClick={() => requestSafety('help')} disabled={safety.stopped || session?.status === 'stopped'}>手伝って</button><button className="stop" onClick={() => requestSafety('stop')}>やめる</button></div></div>;
 }
 createRoot(document.getElementById('root')!).render(<App />);

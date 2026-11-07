@@ -6,6 +6,7 @@ const exec = promisify(execFile);
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { FakeTtsAdapter, configuredTts, VertexTtsAdapter, type TtsAdapter } from '../apps/api/src/tts.ts';
 import { createApp } from '../apps/api/src/app.ts';
 import { MemoryRepository, seed, doc, type Storage, type Repository } from '../apps/api/src/adapters.ts';
 import { createWorker } from '../apps/generator/src/worker.ts';
@@ -41,7 +42,7 @@ before(async () => {
         await rm(dir, { recursive: true, force: true });
     }
 });
-async function harness(limit = 30, model: VideoModel = new FakeModel(), asyncAdapter = false) {
+async function harness(limit = 30, model: VideoModel = new FakeModel(), asyncAdapter = false, tts: TtsAdapter = new FakeTtsAdapter()) {
     const db = new MemoryRepository();
     seed(db);
     const storage = new TestStorage();
@@ -50,7 +51,7 @@ async function harness(limit = 30, model: VideoModel = new FakeModel(), asyncAda
     } : db;
     const run = createWorker(repository, storage, model, limit);
     const { app } = createApp({
-        db: repository, storage, globalLimit: limit, internalToken: 'test-internal', runJob: run
+        db: repository, storage, tts, globalLimit: limit, internalToken: 'test-internal', runJob: run
     });
     const base = 'http://localhost/api/v1';
     async function request(path: string, method = 'GET', body?: unknown, token = 'staff') {
@@ -480,4 +481,107 @@ test('端末の送信待ちstopは通信断後に再送でき、helpとnextの�
     finally {
         await h.close();
     }
+});
+
+test('音声ありの承認は確認済み短文だけを渡し、版専用音声を配信・固定する', async () => {
+    const inputs: string[] = [];
+    const fake = new FakeTtsAdapter();
+    const h = await harness(30, new FakeModel(), false, { synthesize: async text => {
+        inputs.push(text);
+        return fake.synthesize(text);
+    } });
+    const { taskId } = await h.task();
+    const { draft } = await h.generate(taskId, 'b');
+    assert.deepEqual(inputs, []);
+    assert.equal((await h.request(`/drafts/${draft.id}/approve`, 'POST', { expectedRevision: draft.revision, approvalRequestId: 'unreviewed' })).status, 422);
+    assert.deepEqual(inputs, []);
+    draft.editedSteps.forEach((s: any, i: number) => { s.text = `確認した短文 ${i + 1}`; });
+    const r = await h.approve(draft);
+    assert.deepEqual(inputs, draft.editedSteps.map((s: any) => s.text));
+    await h.assign(taskId, r.releaseId, 'b');
+    const session = await h.session(taskId, 'learner-b');
+    const audio = h.db.all('assets').filter(a => a.kind === 'audio');
+    assert.equal(audio.length, session.steps.length);
+    for (const step of session.steps) {
+        const a = audio.find(a => a.id === step.audioAssetId)!;
+        assert.ok(a);
+        assert.equal(a.visibility, 'approved');
+        assert.equal(a.releaseId, r.releaseId);
+        assert.deepEqual(Object.keys(step).sort(), ['audioAssetId', 'imageAssetId', 'order', 'stepId', 'text', 'visibleCaution']);
+        const response = await h.request(`/assets/${a.id}`, 'GET', undefined, 'learner-b');
+        assert.equal(response.status, 200);
+        assert.equal(response.headers.get('content-type'), 'audio/wav');
+        assert.equal(response.data.subarray(0, 4).toString(), 'RIFF');
+        assert.equal((await h.request(`/assets/${a.id}`, 'GET', undefined, 'learner-a')).status, 403);
+    }
+    const privateAudio = doc('demo', { kind: 'audio', visibility: 'staff', objectPath: 'draft/private.wav', mimeType: 'audio/wav' });
+    h.db.put('assets', privateAudio);
+    assert.equal((await h.request(`/assets/${privateAudio.id}`, 'GET', undefined, 'learner-b')).status, 403);
+    const unlisted = doc('demo', { kind: 'audio', visibility: 'approved', releaseId: r.releaseId, objectPath: 'unlisted.wav' });
+    h.db.put('assets', unlisted);
+    assert.equal((await h.request(`/assets/${unlisted.id}`, 'GET', undefined, 'learner-b')).status, 403);
+    const before = audio.map(a => Buffer.from(h.storage.data.get(a.objectPath)!));
+    const next = await h.generate(taskId, 'b');
+    assert.equal(inputs.length, session.steps.length);
+    next.draft.editedSteps[0].text = '新しい短文';
+    const newer = await h.approve(next.draft, 'new-audio');
+    await h.assign(taskId, newer.releaseId, 'b');
+    assert.deepEqual(await h.ok(`/me/sessions/${session.sessionId}`, 'GET', undefined, 'learner-b'), session);
+    for (const [i, a] of audio.entries()) {
+        assert.deepEqual(h.storage.data.get(a.objectPath), before[i]);
+        assert.equal((await h.request(`/assets/${a.id}`, 'GET', undefined, 'learner-b')).status, 200);
+    }
+    await h.ok(`/drafts/${next.draft.id}/approve`, 'POST', newer.payload);
+    assert.equal(inputs.length, session.steps.length * 2);
+});
+
+test('音声なしはTTSを呼ばずDTOにも含めない・プロフィールをbooleanで更新できる', async () => {
+    const h = await harness(30, new FakeModel(), false, { synthesize: async () => { throw Error('must not be called'); } });
+    await h.ok('/learners/a', 'PATCH', { preferences: { sentenceLength: 40, splitHints: '9工程', audioGuidance: true } });
+    assert.equal(h.db.get('learners', 'a')!.preferences.audioGuidance, true);
+    await h.ok('/learners/a', 'PATCH', { preferences: { sentenceLength: 40, splitHints: '9工程', audioGuidance: false } });
+    const { taskId } = await h.task();
+    const { draft } = await h.generate(taskId);
+    const r = await h.approve(draft);
+    await h.assign(taskId, r.releaseId);
+    const s = await h.session(taskId);
+    assert.equal(h.db.all('assets').filter(a => a.kind === 'audio').length, 0);
+    assert.ok(s.steps.every((step: any) => !('audioAssetId' in step)));
+});
+
+test('TTS途中失敗は承認版も音声メタデータも公開せず、再試行できる', async () => {
+    let calls = 0, failing = true;
+    const fake = new FakeTtsAdapter();
+    const h = await harness(30, new FakeModel(), false, { synthesize: async text => {
+        if (++calls === 2 && failing) throw Error('secret provider detail');
+        return fake.synthesize(text);
+    } });
+    const { taskId } = await h.task();
+    const { draft } = await h.generate(taskId, 'b');
+    const reviewChecks = { presentationConfirmed: true, flagResolution: '確認済み', steps: Object.fromEntries(draft.editedSteps.map((s: any) => [s.stepId, { videoVerified: true, photoTextVerified: true }])) };
+    const { revision } = await h.ok(`/drafts/${draft.id}`, 'PATCH', { expectedRevision: draft.revision, editedSteps: draft.editedSteps, reviewChecks });
+    const payload = { expectedRevision: revision, approvalRequestId: 'retry-tts' };
+    const result = await h.request(`/drafts/${draft.id}/approve`, 'POST', payload);
+    assert.equal(result.status, 502);
+    assert.equal(result.data.error.code, 'TTS_GENERATION_FAILED');
+    assert.ok(!JSON.stringify(result.data).includes('secret'));
+    assert.equal(h.db.all('releases').length, 0);
+    assert.equal(h.db.all('assets').filter(a => a.visibility === 'approved').length, 0);
+    assert.equal(h.db.get('drafts', draft.id)!.status, 'editing');
+    failing = false;
+    await h.ok(`/drafts/${draft.id}/approve`, 'POST', payload);
+    assert.equal(h.db.all('releases').length, 1);
+});
+
+test('Fake WAVは短文長に応じた長さ・Vertexは明示選択のみで未接続なら失敗', async () => {
+    const fake = new FakeTtsAdapter();
+    const short = await fake.synthesize('短文');
+    const long = await fake.synthesize('長い短文を読み上げます');
+    assert.ok(long.durationMs > short.durationMs);
+    assert.ok(long.bytes.length > short.bytes.length);
+    assert.ok(configuredTts({}) instanceof FakeTtsAdapter);
+    const vertex = configuredTts({ TTS_PROVIDER: 'vertex' }) as VertexTtsAdapter;
+    assert.equal(vertex.model, 'gemini-2.5-flash-tts');
+    assert.equal((configuredTts({ TTS_PROVIDER: 'vertex', TTS_MODEL: 'chosen' }) as VertexTtsAdapter).model, 'chosen');
+    await assert.rejects(vertex.synthesize('確認済み'), /VERTEX_TTS_NOT_CONFIGURED/);
 });

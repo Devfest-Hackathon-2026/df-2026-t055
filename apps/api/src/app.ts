@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { editedStepSchema, eventSchema, generationRequestSchema, approvalRequestSchema, draftPatchSchema, sessionStartSchema, type Member, type LearnerSessionDTO } from '../../../packages/shared/src/index.ts';
 import { MemoryRepository, LocalStorage, DemoAuth, seed, doc, id, now, type Repository, type Storage, type Auth, type Doc } from './adapters.ts';
+import { configuredTts, type TtsAdapter } from './tts.ts';
 import { media } from './media.ts';
 export class HttpError extends Error {
     constructor(public status: number, public code: string) {
@@ -14,6 +15,7 @@ export function fail(status: number, code: string): never {
     throw new HttpError(status, code);
 }
 export function createApp(options: {
+    tts?: TtsAdapter;
     db?: Repository;
     storage?: Storage;
     auth?: Auth;
@@ -26,6 +28,7 @@ export function createApp(options: {
     if (!options.db)
         seed(db as MemoryRepository);
     const storage = options.storage ?? new LocalStorage();
+    const tts = options.tts ?? configuredTts();
     const auth = options.auth ?? new DemoAuth(db);
     const app = http();
     const limit = options.globalLimit ?? Number(process.env.GENERATION_GLOBAL_LIMIT ?? 30);
@@ -129,7 +132,7 @@ export function createApp(options: {
     api.patch('/learners/:id', async (req, res) => {
         staff(res);
         const l = await get('learners', req.params.id, res);
-        const { preferences } = z.object({ preferences: z.object({ sentenceLength: z.number().int().min(1).max(40), splitHints: z.string().max(200), audioGuidance: z.literal(false) }).strict() }).strict().parse(req.body);
+        const { preferences } = z.object({ preferences: z.object({ sentenceLength: z.number().int().min(1).max(40), splitHints: z.string().max(200), audioGuidance: z.boolean() }).strict() }).strict().parse(req.body);
         await db.put('learners', { ...l, preferences });
         send(res, { learnerId: l.id });
     });
@@ -256,8 +259,28 @@ export function createApp(options: {
             const fresh = await get('drafts', d.id, res);
             if (fresh.revision !== expectedRevision || fresh.status !== 'editing')
                 fail(409, 'REVISION_CONFLICT');
+            const audioAssets: Doc[] = [];
+            const learner = await get('learners', d.learnerId, res);
+            if (learner.preferences.audioGuidance === true) {
+                try {
+                    for (const s of steps) {
+                        const audio = await tts.synthesize(s.text);
+                        if (!audio.bytes.length || audio.mimeType !== 'audio/wav' || !Number.isFinite(audio.durationMs) || audio.durationMs <= 0)
+                            throw Error('INVALID_TTS_AUDIO');
+                        const a = doc(d.orgId, {
+                            kind: 'audio', objectPath: `approved/${d.orgId}/${releaseId}/${id()}.wav`,
+                            generation: 1, mimeType: audio.mimeType, durationMs: audio.durationMs,
+                            visibility: 'approved', releaseId
+                        });
+                        await storage.put(a.objectPath, audio.bytes);
+                        audioAssets.push(a);
+                    }
+                } catch {
+                    fail(502, 'TTS_GENERATION_FAILED');
+                }
+            }
             const learnerSteps = steps.map((s, i) => ({
-                stepId: s.stepId, order: i + 1, imageAssetId: assets[i].id, text: s.text, visibleCaution: s.visibleCaution
+                stepId: s.stepId, order: i + 1, imageAssetId: assets[i].id, ...(audioAssets[i] ? { audioAssetId: audioAssets[i].id } : {}), text: s.text, visibleCaution: s.visibleCaution
             }));
             const staffGuide = steps.map(({ stepId, sourceStartMs, sourceEndMs, verifiedObservation, verifiedSpeech, coaching, completionCheck }) => ({
                 stepId, sourceStartMs, sourceEndMs, verifiedObservation, verifiedSpeech, coaching, completionCheck
@@ -265,7 +288,7 @@ export function createApp(options: {
             const r = doc(d.orgId, {
                 id: releaseId, taskId: d.taskId, learnerId: d.learnerId, sourceDraftId: d.id, sourceRevision: d.revision, version: (await list('releases', res)).filter(r => r.taskId === d.taskId && r.learnerId === d.learnerId).length + 1, learnerSteps, staffGuide, approvedBy: member(res).uid, approvedAt: now(), approvalRequestId, contentHash: createHash('sha256').update(JSON.stringify({ learnerSteps, staffGuide })).digest('hex')
             });
-            for (const a of assets)
+            for (const a of [...assets, ...audioAssets])
                 await db.put('assets', a);
             await db.put('releases', r);
             await db.put('drafts', { ...fresh, status: 'approved' });
@@ -298,7 +321,7 @@ export function createApp(options: {
             fail(403, 'RELEASE_FORBIDDEN');
         return {
             schemaVersion: '1', sessionId: s.id, releaseId: r.id, steps: r.learnerSteps.map((x: any) => ({
-                stepId: x.stepId, order: x.order, imageAssetId: x.imageAssetId, text: x.text, visibleCaution: x.visibleCaution
+                stepId: x.stepId, order: x.order, imageAssetId: x.imageAssetId, ...(x.audioAssetId ? { audioAssetId: x.audioAssetId } : {}), text: x.text, visibleCaution: x.visibleCaution
             })), status: s.status, stepIndex: s.stepIndex, revision: s.revision
         };
     }
@@ -431,10 +454,10 @@ export function createApp(options: {
     api.get('/assets/:id', async (req, res) => {
         const a = await get('assets', req.params.id, res), m = member(res);
         if (m.role === 'learner') {
-            if (a.visibility !== 'approved' || a.kind !== 'image')
+            if (a.visibility !== 'approved' || !['image', 'audio'].includes(a.kind))
                 fail(403, 'ASSET_FORBIDDEN');
             const r = own(await get('releases', a.releaseId, res), res);
-            if (!r.learnerSteps.some((s: any) => s.imageAssetId === a.id) || !(await list('assignments', res)).some(x => x.learnerId === m.learnerId && x.releaseId === r.id) && !(await list('sessions', res)).some(x => x.learnerId === m.learnerId && x.releaseId === r.id))
+            if (!r.learnerSteps.some((s: any) => (a.kind === 'audio' ? s.audioAssetId : s.imageAssetId) === a.id) || !(await list('assignments', res)).some(x => x.learnerId === m.learnerId && x.releaseId === r.id) && !(await list('sessions', res)).some(x => x.learnerId === m.learnerId && x.releaseId === r.id))
                 fail(403, 'NOT_ASSIGNED');
         }
         if (m.role === 'newcomer') {

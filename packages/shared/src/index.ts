@@ -38,6 +38,7 @@ export type LearnerStep = {
     stepId: string;
     order: number;
     imageAssetId: string;
+    audioAssetId?: string;
     text: string;
     visibleCaution: string;
 };
