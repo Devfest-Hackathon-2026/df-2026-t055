@@ -1,6 +1,6 @@
 # DevFest Hackathon 2026 提出用リポジトリ
 
-> **現在のプロダクト仕様：** [docs/PRODUCT_SPEC.md](docs/PRODUCT_SPEC.md)（AI・チームの実装判断の唯一の正本）。古い設計書・企画資料・提案PRは履歴として保存しています。AIエージェントは [AGENTS.md](AGENTS.md) から読み始めてください。
+> **現在のプロダクト仕様**は [docs/PRODUCT_SPEC.md](docs/PRODUCT_SPEC.md) です。過去の設計書・企画案・調査資料は [アーカイブ](docs/archive/README.md) にまとめています。AIエージェントは [AGENTS.md](AGENTS.md) から読み始めてください。
 
   DevFest Hackathon 2026 のチームの **最終提出用** リポジトリです。提出期限までに、作品のコードと資料をこのリポジトリに置いてください。
 
