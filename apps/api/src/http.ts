@@ -1,4 +1,5 @@
 // Small Node HTTP router; no framework state is shared across requests.
+import { once } from 'node:events';
 import { createServer, type IncomingMessage } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
@@ -205,11 +206,21 @@ export class Router {
                 const request = new globalThis.Request(`http://${input.headers.host ?? 'localhost'}${input.url ?? '/'}`, { method, headers, ...(['GET', 'HEAD'].includes(method) ? {} : { body: new Uint8Array(Buffer.concat(chunks)) }) });
                 const result = await this.fetch(request);
                 output.writeHead(result.status, Object.fromEntries(result.headers));
-                output.end(Buffer.from(await result.arrayBuffer()));
+                if (result.body) {
+                    for await (const chunk of result.body) {
+                        if (!output.write(chunk))
+                            await once(output, 'drain');
+                    }
+                }
+                output.end();
             }
             catch {
-                if (!output.writableEnded)
-                    output.writeHead(500).end();
+                if (!output.writableEnded) {
+                    if (output.headersSent)
+                        output.destroy();
+                    else
+                        output.writeHead(500).end();
+                }
             }
         }).listen(port, host, callback);
     }

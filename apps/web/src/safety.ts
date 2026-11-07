@@ -42,3 +42,57 @@ export function clearWaiting(store: Store, key: string) {
     s.waiting = false;
     store.setItem(key, JSON.stringify(s));
 }
+export type SafetyTransport = {
+    send: (event: SafetyEvent) => Promise<void>;
+    load: () => Promise<{
+        status: string;
+        revision: number;
+    }>;
+};
+export async function flushSafety(store: Store, key: string, transport: SafetyTransport): Promise<boolean> {
+    const pending = [...readSafety(store, key).pending].sort((a, b) => Number(b.type === 'stop') - Number(a.type === 'stop'));
+    for (const event of pending) {
+        if (event.type === 'help' && readSafety(store, key).stopped) {
+            delivered(store, key, event.clientEventId);
+            continue;
+        }
+        try {
+            await transport.send(event);
+            delivered(store, key, event.clientEventId);
+        }
+        catch (error) {
+            if (event.type === 'help' && (error as {
+                status?: number;
+            }).status === 409) {
+                try {
+                    const fresh = await transport.load();
+                    if (fresh.status === 'waiting_help') {
+                        delivered(store, key, event.clientEventId);
+                        continue;
+                    }
+                    if (fresh.status === 'stopped') {
+                        const s = readSafety(store, key);
+                        s.stopped = true;
+                        store.setItem(key, JSON.stringify(s));
+                        delivered(store, key, event.clientEventId);
+                        continue;
+                    }
+                    // An in-flight next may have committed first. Preserve the event ID and wait state.
+                    if (fresh.status === 'active') {
+                        const updated = { ...event, expectedRevision: fresh.revision };
+                        const s = readSafety(store, key);
+                        s.pending = s.pending.map(e => e.clientEventId === event.clientEventId ? updated : e);
+                        store.setItem(key, JSON.stringify(s));
+                        await transport.send(updated);
+                        delivered(store, key, event.clientEventId);
+                        continue;
+                    }
+                }
+                catch {
+                }
+            }
+            return false;
+        }
+    }
+    return true;
+}

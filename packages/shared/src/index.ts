@@ -50,8 +50,9 @@ export type LearnerSessionDTO = {
     stepIndex: number;
     revision: number;
 };
+// stop is accepted even after complete; stopped itself can never resume.
 export const transitions = {
-    queued: ['running'], running: ['succeeded', 'failed'], active: ['waiting_help', 'stopped', 'completed'], waiting_help: ['active', 'stopped'], stopped: [], completed: []
+    queued: ['running'], running: ['succeeded', 'failed'], active: ['waiting_help', 'stopped', 'completed'], waiting_help: ['active', 'stopped'], stopped: [], completed: ['stopped']
 } as const;
 export const generationRequestSchema = z.object({ learnerId: z.string().min(1) }).strict();
 export const approvalRequestSchema = z.object({ expectedRevision: z.number().int().nonnegative(), approvalRequestId: z.string().min(1).max(100) }).strict();

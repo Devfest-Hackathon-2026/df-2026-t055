@@ -442,7 +442,7 @@ export function createApp(options: {
             if (!allowed)
                 fail(403, 'ASSET_FORBIDDEN');
         }
-        res.type(a.mimeType).send(await storage.get(a.objectPath));
+        res.type(a.mimeType).send(await storage.open(a.objectPath));
     });
     api.post('/internal/drain', async (req, res) => {
         if (!options.runJob)

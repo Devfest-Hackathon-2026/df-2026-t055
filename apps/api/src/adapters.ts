@@ -1,3 +1,6 @@
+import { createReadStream } from 'node:fs';
+import { Readable } from 'node:stream';
+import { stat } from 'node:fs/promises';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -60,6 +63,7 @@ export class MemoryRepository implements Repository {
 export interface Storage {
     put(path: string, bytes: Buffer): Promise<void>;
     get(path: string): Promise<Buffer>;
+    open(path: string): Promise<ReadableStream<Uint8Array>>;
     copy(from: string, to: string): Promise<void>;
 }
 export class LocalStorage implements Storage {
@@ -77,6 +81,11 @@ export class LocalStorage implements Storage {
     }
     get(p: string) {
         return readFile(this.path(p));
+    }
+    async open(p: string) {
+        const target = this.path(p);
+        await stat(target);
+        return Readable.toWeb(createReadStream(target)) as ReadableStream<Uint8Array>;
     }
     async copy(a: string, b: string) {
         await this.put(b, await this.get(a));
