@@ -96,14 +96,15 @@ MVPは1組織相当のデモ環境、1作業、架空の本人プロフィール
 6. 同画面：選んだ表示方法で本人画面をプレビューし、各工程の「動画照合済み」「写真・説明確認済み」と、全体の「本人への提示内容確認済み」をチェックする。写真のみの場合は、写真の順序と、文字を表示しない注意点をどう伝えるかも確認する。確認欄の初期値はすべてfalse。プレビューは職員の認証範囲に置く。
 7. 「この内容を承認」で内容のスナップショットを新規保存する。承認者、時刻、版IDが返る。「本人の端末へ渡す」で、その本人の作業に次回用の版を割り当てる。
 8. 修正は新しい下書きから始める。承認済み本文の編集APIは作らない。新版の承認後、職員が次回の開始版に指定する。実行中の本人セッションは元の版を使い続ける。
-9. `/staff/support`：支援要求を3秒間隔で取得する。「手伝って」では職員が「対応を始める」で到着・開始を記録し、支援後に「対応完了」を記録する。停止の通知は、本人の停止を解除せずに確認済みにできる。デモでは職員役が同じ机で待機する。
+9. `/staff/support`：支援一覧を開いている同じ所属の職員に、WebSocketで呼出しを通知する。職員が「担当します」を押すと担当者が決まり、ほかの職員の一覧にも担当済みと表示する。到着した担当職員が「対応を始める」を押して支援する。支援後、本人に再開の希望を確かめて「対応を終えてつづける」を押すと、本人のiPadが同じ工程の作業画面へ戻る。停止通知は確認済みにできる。デモでは職員役が同じ机で待機する。
 
-#### 支援記録を次の版に使う
+職員は自分のアカウントで開いた支援画面から操作し、本人はiPadの作業画面を使い続ける。担当者の決定、支援の開始・完了、作業再開を両画面で共有する。同じ呼出しを複数の職員が引き受けようとした場合、サーバーは最初に保存できた職員を担当者とし、ほかの職員には担当済みを返す。担当職員の画面で「対応完了」だけを記録し、本人が自分で「つづける」を選ぶこともできる。
 
-- 対応開始時に記録欄を開く。「どこでつまずいたか」「何をしたか」「次回の改善提案」を分け、文字または確認・訂正した文字起こしで残す。「後で記録する」で閉じ、対応完了後も入力できる。記録の保存や生成完了を、対面支援や本人の「つづける」の条件にしない。
-- 本人別の作業一覧に、作業名、次回用の承認版、未反映の記録件数、生成・確認状態を表示する。職員が同じ本人・作業の記録を選び、「記録をもとに更新」で非同期生成を開始する。生成失敗時も記録と現在の割当を保ち、職員が再試行できる。
-- 生成後は「職員の確認待ち」とし、変更前後、参照した記録、必要な原動画の区間を並べる。職員が修正し、反映した記録を明示して承認した後に、次回用の版として割り当てる。
-- 他の作業にも使う説明方法は、本人の希望を確かめ、職員が共通プロフィールへ明示的に登録する。個別作業の記録はその作業の改善に使う。
+#### 確認後の修正と再確認
+
+職員が確認チェックを付けた後に写真や工程文を直すと、サーバーは変更した工程の「写真・説明確認済み」と、全体の「本人への提示内容確認済み」を外す。注意、代替テキスト、教え方を直した場合も同じチェックを外す。工程の分割・統合・並替えや原動画の区間を変えた場合は、対象工程の「動画照合済み」も外す。表示方法や読み上げの希望を変えた場合は、全体の提示確認を外す。変更のない工程の確認は保つ。
+
+サーバーは変更前後を比較し、内容の保存と同時に確認チェックを外す。変更を保存する要求でチェックをtrueにしても、変更によるチェックの解除を優先する。職員は保存後の内容をプレビューし、変更した箇所を確認してから、チェックを付け直して「この内容を承認」を押す。
 
 #### 手直しを次回のAI下書きに使う
 
@@ -115,11 +116,18 @@ MVPは1組織相当のデモ環境、1作業、架空の本人プロフィール
 
 職員は本人別の作業一覧から修正履歴とAIの参考メモを確認できる。修正と参考メモはその本人・作業の下書きに使い、他の作業にも使う配慮は従来どおり職員が本人の希望を確かめて共通プロフィールへ登録する。AIが作るのは次回用の下書きで、本人に見せる内容は職員が確認・承認する。現在の承認版と作業中の表示は保つ。
 
+#### 支援記録を次の版に使う
+
+- 担当職員が対応を始めたときに、その職員用画面で記録欄を開く。「どこでつまずいたか」「何をしたか」「次回の改善提案」を分け、文字または確認・訂正した文字起こしで残す。「後で記録する」で閉じ、対応完了後も入力できる。記録の保存や生成完了を、対面支援や作業再開の条件にしない。
+- 本人別の作業一覧に、作業名、次回用の承認版、未反映の記録件数、生成・確認状態を表示する。職員が同じ本人・作業の記録を選び、「記録をもとに更新」で非同期生成を開始する。生成失敗時も記録と現在の割当を保ち、職員が再試行できる。
+- 生成後は「職員の確認待ち」とし、変更前後、参照した記録、必要な原動画の区間を並べる。職員が修正し、反映した記録を明示して承認した後に、次回用の版として割り当てる。
+- 他の作業にも使う説明方法は、本人の希望を確かめ、職員が共通プロフィールへ明示的に登録する。個別作業の記録はその作業の改善に使う。
+
 ### 本人：選ぶ・進める・支援を求める
 
 1. 職員が本人用端末で本人アカウントをログイン済みにし、`/me`を開く。職員が割り当てた承認版の作業名と「はじめる」が返る。割当がなければ「職員をよんでください」と表示する。
 2. 本人が「はじめる」を押すと、セッションと固定の版IDを作成し、`/me/sessions/{sessionId}`へ進む。承認版の表示方法で1工程ずつ写真を示す。「写真と短文」では工程文を添え、「写真のみ」では工程文と文字の注意書きの可視表示を省く。写真の意味は代替テキストで伝える。職員は本人と一対一で手本を示し、必要な注意の伝え方を確かめる。操作ラベルと状況の表示は両方式で保つ。現在位置を示し、「もどる」「つぎへ」、最終工程の「おわる」は本人が操作する。読み上げは版に保存された希望と承認済み音声に従い、本人が再生する。
-3. すべての本人画面で「手伝って」「やめる」を固定表示する。「手伝って」で進行を止め、要求の送信中と、届いて職員を待っている状態を分ける。職員の対応完了後、本人が「つづける」を押すと同じ工程へ戻る。もう一度「手伝って」を選んだ場合は別の支援要求として扱う。
+3. 作業中の本人画面で「手伝って」「やめる」を固定表示する。「手伝って」で進行を止め、支援待ちの表示を開く。送信中、サーバーが呼出しを受け付けて職員を待っている状態、担当者が決まった状態を文字と絵で伝える。担当職員が支援後に「対応を終えてつづける」を押すと、同じ工程へ戻る。職員が対応完了だけを記録した場合は、本人が「つづける」を押して戻れる。もう一度「手伝って」を選んだ場合は別の支援要求として扱う。
 4. 「やめる」は確認ダイアログを挟まず、直ちに写真・手順と進行ボタンを閉じて「作業をやめました」を出す。端末上で即時停止し、停止イベントを送信する。停止したセッションは再開しない。再開希望は職員と相談して新規セッションを作る。
 5. 通信失敗でも停止状態を保つ。支援要求の送信失敗時は「近くの職員をよんでください」と表示し、端末内の送信待ちイベントを再送する。送信成功前に「職員に届きました」と表示しない。
 
@@ -147,16 +155,18 @@ Firestore Native modeに構造化データ、非公開Cloud Storageに動画・�
 | `learners` | `displayName, preferences:{sentenceLength?, splitHints?, displayMode?, audioGuidance?}, learnerWishes?, staffObservations?, staffSuggestions?, confirmedGuidance?, disabilityInfo?:{detail, source, confirmedAt}, enteredBy, updatedBy, revision` | 所属が一致する職員だけが登録・更新する。デモは架空データ。障害に関する情報は本人が共有を希望する支援上必要な内容に限り、記録は任意 |
 | `tasks` | `title, videoAssetId, status: uploading / ready, createdBy` | 動画実体の検査完了でready |
 | `assets` | `kind: video / image / audio, objectPath, generation, mimeType, durationMs?, sourceVideoId?, frameMs?, visibility: staff / approved, releaseId?` | パスはAPI内部用。承認画像は版専用コピーを作り、上書きしない。audioは承認済み短文から生成した読み上げ音声とし、releaseIdにひも付く承認版専用資産とする |
-| `generationJobs` | `kind: guide / correction_context, taskId, draftId, status, attempt, modelId, promptVersion, inputSnapshot, errorCode?, leaseUntil?` | guideは手順の下書き、correction_contextは手直しの参考メモを生成する。受付時の設定と入力を固定する。手順の改善では元の承認版・選択した記録・使用する修正履歴の版も固定する。再試行は新ジョブ |
+| `generationJobs` | `taskId, draftId, status, attempt, modelId, promptVersion, inputSnapshot, errorCode?, leaseUntil?` | 受付時の表示設定・説明方法・入力を固定。改善の場合は元の承認版と選択した記録の版も固定する。再試行は新ジョブ |
 | `drafts` | `taskId, learnerId, jobId, revision, status, aiProposal, editedSteps, displayMode, audioGuidance, reviewChecks, appliedSupportRecordRefs?, updatedBy` | AI原文と職員編集値を分離。ジョブに保存した生成時の設定と、職員が編集・確認した提示設定を区別する |
-| `draftCorrections` | `taskId, learnerId, draftId, draftRevision, changes:[{stepId,field,before,after}], reason?, createdBy, contextJobId?, contextSummary?` | 職員が保存した修正を記録する。修正前後の値はサーバーが確定し、履歴を保持する。要約結果はその履歴にだけ保存し、遅く完了した処理で新しい修正を上書きしない |
 | `releases` | `taskId, learnerId, sourceDraftId, sourceRevision, sourceReleaseId?, appliedSupportRecordRefs?, version, displayMode, audioGuidance, learnerSteps[], staffGuide[], approvedBy, approvedAt, contentHash` | 承認時に新規作成。表示方法・読み上げの希望・採用した記録の版も固定する。本文の更新・削除APIを設けない |
 | `assignments` | `learnerId, taskId, releaseId, assignedBy, updatedAt` | 次回開始版へのポインタ。承認済みかつ本人ID一致の版だけを指す |
-| `sessions` | `learnerId, releaseId, status, stepIndex, revision, startedAt, endedAt?` | 開始時に版を固定。進行はイベントと同一トランザクションで更新 |
+| `sessions` | `learnerId, releaseId, status, stepIndex, revision, activeSupportRequestId?, startedAt, endedAt?` | 開始時に版を固定。支援待ちでは対象の要求IDを保存する。進行はイベントと同一トランザクションで更新 |
 | `sessionEvents` | `sessionId, clientEventId, type, stepId?, createdBy, receivedAt` | 進行・支援要求・停止・完了を追記。clientEventIdで重複排除 |
-| `supportRequests` | `sessionId, eventId, kind: help / stop, status: open / in_progress / acknowledged, startedBy?, startedAt?, acknowledgedBy?, acknowledgedAt?` | 職員の支援一覧用。支援の開始と完了を別々に記録する。停止イベントの通知にも使う |
+| `supportRequests` | `sessionId, eventId, kind: help / stop, status: open / assigned / in_progress / acknowledged, revision, assignedTo?, assignedAt?, startedBy?, startedAt?, acknowledgedBy?, acknowledgedAt?` | 職員の支援一覧用。担当決定・到着と開始・完了を別々に記録する。状態変更ごとにrevisionを増やす。停止イベントの通知にも使う |
 | `supportRecords` | `supportRequestId, learnerId, taskId, releaseId, stepId, sessionId, observedDifficulty, assistanceGiven, improvementSuggestion, createdBy, updatedBy, updatedAt, revision` | 支援要求ごとに1件。対象IDはサーバーが要求とセッションから確定する。記録の参照は `{recordId, revision}` で行う |
+| `draftCorrections` | `taskId, learnerId, draftId, draftRevision, changes:[{stepId,field,before,after}], reason?, createdBy, contextJobId?, contextSummary?` | 職員が保存した修正を記録する。修正前後の値はサーバーが確定し、履歴を保持する。要約結果はその履歴にだけ保存し、遅く完了した処理で新しい修正を上書きしない |
 | `handoverReads` | `releaseId, newcomerUid, readAt` | 承認版を読んだ記録 |
+
+`generationJobs` は `kind: guide / correction_context` を持つ。`guide` は手順の下書き、`correction_context` は手直しの参考メモを生成する。受付時の設定と入力を固定する。手順の改善では元の承認版・選択した記録・使用する修正履歴の版も固定する。再試行は新ジョブ。
 
 `displayMode` は `photo_only`（写真のみ）または `photo_text`（写真と短文）。プロフィールで未確認なら項目を省略でき、下書きの初期値は `photo_text` とする。表示方法が保存されていない旧承認版も `photo_text` として扱い、読み上げは版に承認済み音声がある工程に限る。プロフィールを変更しても、既存の承認版や実行中の表示を変更しない。
 
@@ -169,8 +179,8 @@ Firestore Native modeに構造化データ、非公開Cloud Storageに動画・�
 - 生成ジョブ：`queued → running → succeeded | failed`。Cloud Tasksの再配送は同じジョブを検査し、成功済みなら終了。実行中はリースを使い、切れたリースだけを取り直す。試行上限は3回。
 - 下書き：`generating → editing → approved`、生成失敗は`generating → failed`。承認時に編集を閉じる。再生成は別draftIdとし、旧下書きと承認版を保存する。
 - 承認処理：版専用の画像を先に用意し、トランザクションで下書きrevision・確認欄を検査してrelease作成とdraftのapproved化を同時実行する。競合は409。失敗して残った画像は職員にも本人にも配信せず、保管期限で消す。[Firestoreのトランザクション仕様](https://cloud.google.com/firestore/native/docs/manage-data/transactions)
-- セッション：`active → waiting_help → active`、`active | waiting_help → stopped`、`active → completed`。`stopped`と`completed`は終端。停止の再送は成功扱いとし、停止後の進行イベントは409で拒否する。支援完了を記録してもセッションは自動再開せず、本人が「つづける」を選ぶ。
-- 支援要求：`help` は `open → in_progress → acknowledged`（待機・対応中・対応完了）、`stop` は `open → acknowledged`（停止通知の確認）。同一要求の開始・完了の再送では元の職員と時刻を保つ。記録の入力や生成の状態は要求と分ける。
+- セッション：`active → waiting_help → active`、`active | waiting_help → stopped`、`active → completed`。`stopped`と`completed`は終端。停止の再送は成功扱いとし、停止後の進行イベントは409で拒否する。再開は担当職員の「対応を終えてつづける」、または対応完了後の本人の「つづける」で行う。再開時はactiveSupportRequestIdを外し、版と工程は保つ。
+- 支援要求：`help` は `open → assigned → in_progress → acknowledged`（未担当・担当決定・対応中・対応完了）、`stop` は `open → acknowledged`（停止通知の確認）。担当決定はトランザクションで行う。担当職員だけがhelpの開始・完了・職員側からの再開を操作できる。同じ職員の担当決定・開始・完了の再送では元の職員と時刻を保つ。記録の入力や生成の状態は要求と分ける。
 
 Cloud Storageは`source/{orgId}/{taskId}/...`、`draft/{orgId}/{draftId}/...`、`approved/{orgId}/{releaseId}/...`に分ける。本人へ配信するのは、次回用に割り当てられた版または本人のセッションに固定された版の承認画像・音声。元動画は職員と、その承認版を読む新人に配信する。新人には承認済み区間のリンクを付ける。
 
@@ -194,17 +204,19 @@ Cloud Storageは`source/{orgId}/{taskId}/...`、`draft/{orgId}/{draftId}/...`、
 | `POST /tasks/{id}/generations` | 職員 | `{learnerId}` → 202 `{jobId,draftId}`。記録からの改善では `sourceReleaseId, supportInputs:[{recordId, revision, summary}], clientRequestId` も送る。新規生成・改善を合わせて1作業あたり手順下書きの生成試行10回まで |
 | `GET /jobs/{id}` | 職員 | `{kind,status,draftId,errorCode?}`。画面は3秒間隔で取得。下書きの生成状態にはguideのジョブを使う |
 | `GET /drafts/{id}` | 職員 | AI原文と編集データを別オブジェクトで返す |
-| `PATCH /drafts/{id}` | 職員 | `{expectedRevision,editedSteps,reviewChecks,displayMode?,audioGuidance?,appliedSupportRecordRefs?,correctionReason?}` → `{revision}`。編集内容の差分があれば修正履歴も保存し、参考メモの生成を非同期で受け付ける。確認チェックだけの変更や、競合で保存できなかった修正からは履歴を作らない |
+| `PATCH /drafts/{id}` | 職員 | `{expectedRevision,editedSteps,reviewChecks,displayMode?,audioGuidance?,appliedSupportRecordRefs?,correctionReason?}` → `{revision,reviewChecks}`。内容を変更した場合は第2節の規則で確認チェックを外し、保存後のチェック状態を返す。編集内容の差分があれば修正履歴も保存し、参考メモの生成を非同期で受け付ける。確認チェックだけの変更や、競合で保存できなかった修正からは履歴を作らない |
 | `POST /drafts/{id}/frames` | 職員 | `{frameMs}` → `{imageAssetId}`。サーバーのffmpegで原動画から静止画を切り出す |
 | `POST /drafts/{id}/approve` | 職員 | `{expectedRevision,approvalRequestId}` → `{releaseId,version}`。二重送信は同じ版を返す |
 | `PUT /assignments/{learnerId}/{taskId}` | 職員 | `{releaseId}` → 次回開始版の割当 |
 | `GET /me/assignments` | 本人 | 作業名・割当版IDのみ。下書きがあっても応答は変えない |
 | `POST /me/sessions` | 本人 | `{taskId,clientRequestId}` → `{sessionId,releaseId,displayMode,audioGuidance,steps}`。固定した版の許可フィールドで組み立てる |
-| `GET /me/sessions/{id}` | 本人 | 固定版の手順・表示方法・読み上げの設定とセッション状態 |
-| `POST /me/sessions/{id}/events` | 本人 | `{clientEventId,expectedRevision,type: next / back / help / resume / stop / complete}` → `{status,stepIndex,revision}` |
-| `GET /support-requests` | 職員 | `open`・`in_progress` の要求一覧。記録の後入力では `?status=acknowledged` で対応完了した要求を取得できる |
-| `POST /support-requests/{id}/start` | 職員 | `{}` → `{status,startedAt}`。対象は `help`。初回は `in_progress` にする |
-| `POST /support-requests/{id}/acknowledge` | 職員 | `{}` → `{status:"acknowledged",acknowledgedAt}`。支援の完了または停止通知の確認 |
+| `GET /me/sessions/{id}` | 本人 | 固定版の手順・表示方法・読み上げの設定とセッション状態。支援待ちでは `support:{requestId,status,revision}` も返す |
+| `POST /me/sessions/{id}/events` | 本人 | `{clientEventId,expectedRevision,type: next / back / help / resume / stop / complete}` → `{status,stepIndex,revision,support?}`。helpでは要求を作り、対象IDをセッションに保存する。resumeはその要求の対応完了後に限る |
+| `GET /support-requests` | 職員 | `open`・`assigned`・`in_progress` の要求一覧。記録の後入力では `?status=acknowledged` で対応完了した要求を取得できる |
+| `POST /support-requests/{id}/claim` | 職員 | `{}` → `{status:"assigned",assignedTo,assignedAt,revision}`。helpの担当を自分にする。別の職員が担当済みなら409 |
+| `POST /support-requests/{id}/start` | 担当職員 | `{}` → `{status,startedAt}`。対象はassignedのhelp。初回はin_progressにする |
+| `POST /support-requests/{id}/acknowledge` | 職員 | `{}` → `{status:"acknowledged",acknowledgedAt}`。helpは担当職員が対応完了を記録する。stopは同じ所属の職員が通知を確認する |
+| `POST /support-requests/{id}/resume` | 担当職員 | `{clientRequestId,expectedSessionRevision}` → `{sessionId,status,stepIndex,revision}`。対応中または対応完了のhelpに対し、必要なら対応完了の記録と、対象の呼出しで支援待ちになっているセッションの再開・イベント保存を一つのトランザクションで行う。記録入力は不要。同じキーの再送で再開を重ねない |
 | `GET /support-requests/{id}/record` / `PUT /support-requests/{id}/record` | 職員 | 支援記録の取得／保存。保存は `{expectedRevision,observedDifficulty,assistanceGiven,improvementSuggestion}`。初回は `expectedRevision: 0`。対応開始後から、対応完了後も保存できる |
 | `GET /handover/releases` / `GET /handover/releases/{id}` | 職員・新人 | 承認済み一覧／本人手順とstaffGuide |
 | `POST /handover/releases/{id}/read` | 新人 | `{}` → `{readAt}` |
@@ -214,6 +226,14 @@ Cloud Storageは`source/{orgId}/{taskId}/...`、`draft/{orgId}/{draftId}/...`、
 変更系APIはJSONとOriginを検査する。本人のstopはexpectedRevisionの一致より停止を優先し、同じセッションの進行操作と競合しても、止める操作を失わせない。ブラウザは停止状態を先に保持し、再読み込み後も送信完了まで再開しない。
 
 同じ `clientRequestId` で同じ改善要求を再送した場合は元のジョブを返し、異なる内容でのキーの再利用は409で拒否する。新規受付では、元の承認版が対象の本人・作業の次回版であることと、選択された記録が同じ所属・本人・作業の最新revisionであることを検査する。変わっていれば409で再選択を求める。承認時は、実際に反映した記録のIDとrevisionがジョブで参照した範囲内にあることを検査する。
+
+### 支援中のWebSocket連携
+
+`/api/v1/ws`でWebSocket接続を受ける。職員は支援一覧を開いている間、本人は支援待ちの間に接続する。ブラウザは初回メッセージでFirebase IDトークンを渡す。サーバーはトークン・members・Originを検査してから購読を許可する。認証前の接続は5秒で閉じ、トークンをURLやログに残さない。有効期限切れでは切断し、再認証して接続し直す。
+
+職員には同じ所属の支援一覧、本人には自分のセッションと支援状態の変更だけを通知する。本人向け通知には職員メモ・支援記録・プロフィールを含めない。更新操作は上表の認証付きHTTP APIで受け、Firestoreへの保存後に通知する。担当職員が職員用画面で操作すると、本人のiPadは通知された保存済みの状態を表示する。
+
+サーバーは接続直後と再接続時に最新状態を送り直す。ブラウザはセッションと支援要求のrevisionを確認して古い通知を除き、再接続だけでは作業を再開しない。通信断中は支援待ちを保ち、HTTPで3秒ごとに最新状態を確認する。支援終了または画面を閉じたときに不要な接続を閉じる。本人が「やめる」を押した端末では、未送信の停止が残っていても停止表示を維持し、再開通知で作業へ戻さない。サーバーも停止済みセッションの再開を拒否する。
 
 ### Geminiへ渡す内容
 
@@ -279,6 +299,7 @@ API側でも同じスキーマ、文字数、時刻、参照先を検査する�
 - Cloud Runは2サービス。`web-api`は公開HTTPSリクエストを受け付け、`generator`は認証付きの内部処理。生成はCloud TasksのHTTP呼出し内で完了させ、ブラウザ切断と切り離す。応答後のバックグラウンド処理に依存しない。[Cloud Runの実行契約](https://cloud.google.com/run/docs/container-contract)
 - Cloud Tasksは生成キューを並列1に制限し、生成タイムアウトを240秒、Cloud Run側を300秒にする。タスク再配送とジョブのリース・冪等処理を組み合わせる。
 - Firestoreは手順、承認、割当、プロフィール、支援イベント・記録と生成時点の参照を永続化する。Storageは非公開とし、公開ACLと一般公開URLを使わない。画像取得もAPI経由にする。
+- WebSocketはweb-apiで受ける。接続先が別インスタンスでも状態を共有できるよう、各インスタンスが購読対象のFirestore更新を監視して通知する。接続中のメモリだけに担当者や作業状態を保持しない。Cloud Runのリクエスト期限による切断を前提に再接続を実装し、接続中の課金を含めて予算を確認する。[Cloud RunのWebSocket仕様](https://cloud.google.com/run/docs/triggering/websockets)
 - サービスアカウントをweb、generator、task呼出用に分ける。Vertex AI実行権限はgeneratorへ付与する。Google認証は実行環境のサービスアカウントで行い、鍵ファイルを置かない。
 - Cloud Buildでコンテナを作り、Artifact Registryに保存してCloud Runへデプロイする。Cloud LoggingにはrequestId、ジョブ状態、エラーコードだけを記録する。
 - Cloud Runのローカルディスクは動画処理の一時領域だけに使い、処理後に削除する。永続化先にしない。
@@ -337,14 +358,16 @@ MagnusCardsの機能差は比較担当（検証・提出担当）が11/8午後�
 - 生成失敗、JSON不正、承認の二重送信、古いrevision、別本人の版の割当を検査する。
 - 承認後に再生成しても表示が変わらず、新版の割当後も実行中セッションの画像・本文が変わらない。
 - 手伝ってが職員一覧に届く。通信断でもやめるが即時動作し、再読み込みとイベント再送の後も停止状態を保つ。停止とつぎへの競合でも停止が残る。
+- **担当決定と画面連携。** 二人の職員が同じ呼出しの「担当します」を押した場合に一人だけが担当になる。担当外・別所属・本人・新人による職員操作を拒否する。担当決定と支援後の再開が本人のiPadに伝わり、同じ工程・版で続けられる。職員と本人が別のCloud Runインスタンスに接続した場合、接続切れ・再接続・古い通知・未送信の停止がある場合も検査する。職員メモや記録が本人向け通知へ混入しないことを確認する。
 
 ### 本人向け表示と支援記録の受入条件
 
-- **手直しの引き継ぎ。** 職員が「はしをそろえる」を「赤い線にあわせる」に直して保存すると、履歴が残り、AIが次回用の参考メモを作る。同じ本人・作業の次回生成では修正が参照され、写真にない目印や本人の能力を補完しない。要約待ち・失敗・生成受付停止でも編集でき、古い要約が新しい修正を上書きしない。別本人・別作業・別所属の履歴が混ざらず、本人・新人から履歴を取得できないこと、承認版と作業中の表示が変わらないことを確認する。
+- **編集後の再確認。** 確認済みの下書きで写真・工程文を変更すると、対象工程の写真・説明確認と全体の提示確認が外れる。工程の区切りを変えた場合は動画照合も外れる。同じ保存要求でtrueを送っても解除され、未確認のままでは承認できない。表示方法の変更、変更のない工程の確認保持、再確認後の承認を試す。
 - **プロフィールと写真のみ表示。** 職員が本人と希望を確認して登録し、写真のみの下書き・プレビュー・承認・割当から本人表示と新人の引き継ぎまで通す。写真不足、工程上限、未確認の設定、注意の伝達と代替テキストを確認する。写真と短文および読み上げを併用した場合も試す。プロフィール変更や新版の割当後も実行中の表示方法と内容が変わらないことを確認する。
 - **データ境界。** 別所属や本人・新人が職員用のプロフィールや支援記録へアクセスすると拒否される。任意項目を消せること、職員向けの特性や記録が本人用応答とモデル入力に混入しないこと、選択した記録の確認済み要約だけを改善に使用することを確認する。
 - **ピクトグラム。** 本人が「手伝って」と「やめる」の目的と押した後の状態を、文字を読むことに頼らず確かめられるかを見る。小さい画面、拡大、色の見え方、キーボード、スクリーンリーダー、絵の読み込み失敗、通信断で操作を確認する。本人による意味の確認と、支援要求・再開・即時停止・完了の動作確認を分けて記録する。
 - **支援記録と非同期改善。** 同じ工程で繰り返し支援を求めた場合に別々の記録を作れ、後で入力できることを確認する。音声の訂正・失敗、記録未入力のままの再開、改善中に追加・編集された記録、生成失敗と再試行、生成成功と採用の区別を試す。職員の承認と次回版の割当を経て新版を次回だけ使うことを確認する。
+- **手直しの引き継ぎ。** 職員が「はしをそろえる」を「赤い線にあわせる」に直して保存すると、履歴が残り、AIが次回用の参考メモを作る。同じ本人・作業の次回生成では修正が参照され、写真にない目印や本人の能力を補完しない。要約待ち・失敗・生成受付停止でも編集でき、古い要約が新しい修正を上書きしない。別本人・別作業・別所属の履歴が混ざらず、本人・新人から履歴を取得できないこと、承認版と作業中の表示が変わらないことを確認する。
 - **運用負担。** 支援中・支援後の入力、入力忘れ、音声訂正、元動画の再解析が必要になる条件を観察する。生成時間に加え、記録・修正・照合・承認を含む職員の総作業時間を測り、時短は実測結果に基づいて判断する。
 
 ### アクセシビリティの判断と検証の記録
@@ -467,7 +490,7 @@ UI・説明方法・支援の操作を変更する際は、第12節の調査資�
 | --- | --- | --- |
 | 写真・短文・ピクトグラム、工程の粒度、文字・進捗表示 | 第1〜4節、第8節A1・A2、第11節 | 第1〜3・8節の提示方法、本人と確認する設定、写真・代替テキストと操作・状態表示 |
 | 音声・読み上げ | 第6節、第8節「音声」、第11節 | 第1・4・9節の承認済み短文からの事前生成、版との対応、P1の採用条件 |
-| 手伝って・もどる・やめる、通信断 | 第1節、第8節A3〜A5、第11節 | 第2〜4・8節の送信・支援状態、本人による再開、即時停止、終端状態、配信と保存の境界 |
+| 手伝って・もどる・やめる、通信断 | 第1節、第8節A3〜A5、第11節 | 第2〜4・8節の送信・担当決定・支援状態、本人または担当職員による再開、即時停止、終端状態、配信と保存の境界 |
 | 職員の確認・承認、写真候補 | 第3・4・7節、第8節R1・R2、第11節 | 第2・4・8節の原動画照合、提示内容・音声の確認、見落としと総作業時間 |
 | 支援記録からの改善、AI生成指示・個別化 | 第2〜4・7節、第8節R1、第11節 | 第2〜4・8節の本人の希望と観察・提案の区別、送信する要約、生成時の入力固定、人による採否と次回版への反映 |
 | 本人参加、専門家レビュー、審査説明 | 第7・10・11節 | 第8・10節の評価条件・結果・限界と提出する証拠 |
