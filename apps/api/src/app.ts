@@ -15,7 +15,8 @@ import { configuredTts, type TtsAdapter } from './tts.ts';
 import { media } from './media.ts';
 import type { GenerationQueue } from './cloud-tasks.ts';
 import { generationEnabled } from './generation-control.ts';
-import { guideGenerationRequestSchema, improvementGuideInputSnapshotSchema, correctionContextInputSnapshotSchema } from '../../../packages/shared/src/generation.ts';
+import { frozenCorrections } from './correction-input.ts';
+import { guideGenerationRequestSchema, improvementGuideInputSnapshotSchema, initialGuideInputSnapshotSchema, correctionContextInputSnapshotSchema } from '../../../packages/shared/src/generation.ts';
 export class HttpError extends Error {
     constructor(public status: number, public code: string) {
         super(code);
@@ -214,6 +215,7 @@ export function createApp(options: {
             const learner = await get('learners', learnerId, res);
             if (jobs.reduce((n, j) => n + j.budgetUsed, 0) >= limit || jobs.filter(j => j.taskId === t.id && j.kind !== 'correction_context').reduce((n, j) => n + j.budgetUsed, 0) >= 10)
                 fail(409, 'GENERATION_LIMIT');
+            const correctionInputs = await frozenCorrections(db, t.orgId, learnerId, t.id);
             let inputSnapshot: unknown;
             if (improvement) {
                 const source = await get('releases', improvement.sourceReleaseId, res);
@@ -224,8 +226,14 @@ export function createApp(options: {
                     if (record.taskId !== t.id || record.learnerId !== learnerId || record.revision !== input.revision) fail(409, 'SUPPORT_RECORD_CHANGED');
                 }
                 inputSnapshot = improvementGuideInputSnapshotSchema.parse({ taskId: t.id, learnerId, sourceReleaseId: source.id,
-                    sourceReleaseVersion: source.version, supportInputs: improvement.supportInputs, correctionRefs: [],
+                    sourceReleaseVersion: source.version, supportInputs: improvement.supportInputs, correctionRefs: correctionInputs.map(c => ({ correctionId: c.correctionId, draftRevision: c.draftRevision })), correctionInputs,
                     displayMode: learner.preferences.displayMode ?? 'photo_text', confirmedGuidance: learner.confirmedGuidance ?? [] });
+            } else if (correctionInputs.length) {
+                const video = await get('assets', t.videoAssetId, res);
+                inputSnapshot = initialGuideInputSnapshotSchema.parse({ taskId: t.id, learnerId, videoAssetId: video.id, title: t.title,
+                    completionCriteria: '帯紙の向き、袋口、テープを見本と比較する', durationMs: video.durationMs,
+                    preferences: { sentenceLength: learner.preferences.sentenceLength ?? 40, splitHints: learner.preferences.splitHints ?? '', audioGuidance: false },
+                    displayMode: learner.preferences.displayMode ?? 'photo_text', confirmedGuidance: learner.confirmedGuidance ?? [], correctionInputs });
             }
             const d = doc(t.orgId, {
                 taskId: t.id, learnerId, displayMode: learner.preferences.displayMode ?? 'photo_text', audioGuidance: learner.preferences.audioGuidance ?? false, revision: 0, status: 'generating', editedSteps: [], reviewChecks: { presentationConfirmed: false, flagResolution: '', steps: {} }, updatedBy: member(res).uid,
@@ -233,7 +241,7 @@ export function createApp(options: {
             });
             const j = doc(t.orgId, {
                 taskId: t.id, draftId: d.id, kind: 'guide', status: 'queued', attempt: 0, budgetUsed: 1, modelId: options.modelId ?? 'fake-fixture', promptVersion: '1',
-                ...(improvement ? { inputSnapshot, clientRequestId: improvement.clientRequestId, requestHash } : {})
+                ...(inputSnapshot ? { inputSnapshot } : {}), ...(improvement ? { clientRequestId: improvement.clientRequestId, requestHash } : {})
             });
             d.jobId = j.id;
             await db.put('drafts', d);
