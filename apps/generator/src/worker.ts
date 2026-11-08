@@ -37,7 +37,7 @@ export function createWorker(db: Repository, storage: Storage, model: VideoModel
             let timeout: ReturnType<typeof setTimeout> | undefined;
             const output = await Promise.race([model.generate({
                     // 未確認の希望は省略できる（正本第2節）ため、生成への入力は空の分割ヒントで補う。
-                    videoUri: v.objectPath, title: t.title, completionCriteria: '帯紙の向き、袋口、テープを見本と比較する', preferences: { sentenceLength: l.preferences.sentenceLength, splitHints: l.preferences.splitHints ?? '', audioGuidance: false }, durationMs: v.durationMs
+                    videoUri: v.objectPath, title: t.title, completionCriteria: '帯紙の向き、袋口、テープを見本と比較する', preferences: { sentenceLength: l.preferences.sentenceLength, splitHints: l.preferences.splitHints ?? '', audioGuidance: false }, displayMode: d.displayMode ?? 'photo_text', confirmedGuidance: l.confirmedGuidance ?? [], durationMs: v.durationMs
                 }, controller.signal), new Promise<never>((_, reject) => {
                     timeout = setTimeout(() => {
                         controller.abort();

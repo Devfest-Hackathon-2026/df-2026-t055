@@ -4,7 +4,8 @@ import { AI_CANDIDATE_SCHEMA, configuredModel, FakeModel, VertexVideoModel, type
 
 const input: ModelInput = {
     videoUri: 'source/example/task/video.mp4', title: 'タオル包装', completionCriteria: '袋口が閉じている',
-    preferences: { sentenceLength: 20, splitHints: '一つずつ', audioGuidance: false }, durationMs: 120000
+    preferences: { sentenceLength: 20, splitHints: '一つずつ', audioGuidance: false },
+    displayMode: 'photo_only', confirmedGuidance: ['赤い線を目印にする'], durationMs: 120000
 };
 
 test('Vertex request copies only allowed input fields, including nested preferences', async () => {
@@ -16,6 +17,7 @@ test('Vertex request copies only allowed input fields, including nested preferen
         assert.deepEqual(request, {
             videoUri: 'gs://example-private-bucket/source/example/task/video.mp4', mimeType: 'video/mp4',
             title: input.title, completionCriteria: input.completionCriteria, preferences: input.preferences,
+            displayMode: input.displayMode, confirmedGuidance: input.confirmedGuidance,
             durationMs: input.durationMs, responseSchema: AI_CANDIDATE_SCHEMA
         });
         for (const key of Object.keys(forbidden)) assert.equal(JSON.stringify(request).includes(key), false);

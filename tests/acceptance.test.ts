@@ -430,8 +430,10 @@ test('Gemini入力は許可フィールドだけ・候補の時刻違反は画�
     try {
         const { taskId } = await h.task();
         const { draft } = await h.generate(taskId);
-        assert.deepEqual(Object.keys(captured).sort(), ['completionCriteria', 'durationMs', 'preferences', 'title', 'videoUri']);
+        assert.deepEqual(Object.keys(captured).sort(), ['completionCriteria', 'confirmedGuidance', 'displayMode', 'durationMs', 'preferences', 'title', 'videoUri']);
         assert.deepEqual(Object.keys(captured.preferences).sort(), ['audioGuidance', 'sentenceLength', 'splitHints']);
+        assert.equal(captured.displayMode, 'photo_text');
+        assert.deepEqual(captured.confirmedGuidance, []);
         for (const forbidden of ['displayName', 'diagnosis', 'sessionEvents', 'learnerId'])
             assert.ok(!JSON.stringify(captured).includes(forbidden));
         assert.equal(draft.status, 'failed');

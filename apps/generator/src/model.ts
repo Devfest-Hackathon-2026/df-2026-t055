@@ -10,6 +10,9 @@ export type ModelInput = {
         splitHints: string;
         audioGuidance: boolean;
     };
+    // 生成入力の固定項目（契約 generation.md）：受付時の表示方法と確認済みの説明方法。
+    displayMode: 'photo_only' | 'photo_text';
+    confirmedGuidance: string[];
     durationMs: number;
 };
 export interface VideoModel {
@@ -35,6 +38,8 @@ export type VertexVideoRequest = {
     title: string;
     completionCriteria: string;
     preferences: ModelInput['preferences'];
+    displayMode: ModelInput['displayMode'];
+    confirmedGuidance: string[];
     durationMs: number;
     responseSchema: typeof AI_CANDIDATE_SCHEMA;
 };
@@ -80,6 +85,7 @@ export class VertexVideoModel implements VideoModel {
                 splitHints: input.preferences.splitHints,
                 audioGuidance: input.preferences.audioGuidance
             },
+            displayMode: input.displayMode, confirmedGuidance: input.confirmedGuidance,
             durationMs: input.durationMs, responseSchema: AI_CANDIDATE_SCHEMA
         }, signal);
     }
