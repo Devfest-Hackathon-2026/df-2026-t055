@@ -45,31 +45,25 @@ async function harness() {
     return { db, request, approve };
 }
 
-for (const kind of ['image', 'audio'] as const) test(`新人は読んだ承認版の${kind}と対応する原動画だけ取得できる`, async () => {
+for (const kind of ['image', 'audio'] as const) test(`新人は既読前でも承認版の${kind}と対応する原動画を取得できる`, async () => {
     const h = await harness();
     const first = await h.approve('first');
     const second = await h.approve('second');
     const assetId = first.learnerSteps[0][`${kind}AssetId`];
     const otherAssetId = second.learnerSteps[0][`${kind}AssetId`];
     const getAsset = (id: string, token = 'newcomer') => h.request(`/assets/${id}`, 'GET', undefined, token);
-    for (const id of [assetId, 'video', 'image']) {
-        const response = await getAsset(id);
-        assert.equal(response.status, 403);
-        assert.equal((await response.json()).error.code, 'ASSET_FORBIDDEN');
-        assert.equal(response.headers.get('cache-control'), 'no-store');
-    }
-    assert.equal((await h.request(`/handover/releases/${first.id}/read`, 'POST', {}, 'newcomer')).status, 200);
-    for (const id of [assetId, 'video']) {
+    // 引き継ぎは内容を見てから「読んだ」を押すため、既読前でも承認版の素材が見える。
+    for (const id of [assetId, otherAssetId, 'video']) {
         const response = await getAsset(id);
         assert.equal(response.status, 200);
         assert.equal(response.headers.get('cache-control'), 'no-store');
         assert.ok((await response.arrayBuffer()).byteLength > 0);
     }
-    for (const id of [otherAssetId, 'image']) assert.equal((await getAsset(id)).status, 403);
-
-    // 別の新人の既読記録では許可しない。
-    h.db.put('members', doc('demo', { id: 'unread-newcomer', uid: 'unread-newcomer', role: 'newcomer' }));
-    for (const id of [assetId, 'video']) assert.equal((await getAsset(id, 'unread-newcomer')).status, 403);
+    // 下書き画像は職員のみ。
+    const draftImage = await getAsset('image');
+    assert.equal(draftImage.status, 403);
+    assert.equal((await draftImage.json()).error.code, 'ASSET_FORBIDDEN');
+    assert.equal(draftImage.headers.get('cache-control'), 'no-store');
 });
 
 test('本人は割当版の画像を取得でき、割当変更後にセッション未固定の旧版は取得できない', async () => {

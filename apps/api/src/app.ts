@@ -585,9 +585,9 @@ export function createApp(options: {
                 fail(403, 'NOT_ASSIGNED');
         }
         if (m.role === 'newcomer') {
-            const reads = (await list('handoverReads', res)).filter(r => r.newcomerUid === m.uid);
-            const releases = (await list('releases', res)).filter(r => reads.some(read => read.releaseId === r.id));
-            const allowed = a.kind === 'video' ? (await Promise.all(releases.map(async (r) => (await get('tasks', r.taskId, res)).videoAssetId))).includes(a.id) : a.visibility === 'approved' && ['image', 'audio'].includes(a.kind) && releases.some(r => r.id === a.releaseId);
+            // 既読記録を条件にしない。引き継ぎは内容を見てから「読んだ」を押す順序
+            // （正本第2節）のため、初回閲覧の時点で承認版の素材が見えなければならない。
+            const allowed = a.kind === 'video' ? (await Promise.all((await list('releases', res)).map(async (r) => (await get('tasks', r.taskId, res)).videoAssetId))).includes(a.id) : a.visibility === 'approved' && !!await db.get('releases', a.releaseId);
             if (!allowed)
                 fail(403, 'ASSET_FORBIDDEN');
         }
