@@ -6,6 +6,7 @@
     "dev": "node --experimental-transform-types --watch src/server.ts"
   },
   "dependencies": {
-    "@google-cloud/firestore": "^9.4.0"
+    "@google-cloud/firestore": "^9.4.0",
+    "google-auth-library": "^11.3.3"
   }
 }
