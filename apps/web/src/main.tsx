@@ -174,7 +174,8 @@ function Draft({ id, action }: {
     const fetchLatest = async () => {
         const d = (await api(`/drafts/${id}`)).draft;
         setLatest(d);
-        setDraft({ ...draft, revision: d.revision });
+        // 入力は保持したまま、最新の下書きの状態へ移る。承認済みの場合は承認画面を表示する。
+        setDraft({ ...draft, revision: d.revision, status: d.status });
         setConflict(d.status !== 'editing');
         if (d.status !== 'editing') setError('最新の下書きは編集できない状態です。入力は保持しています。');
     };
