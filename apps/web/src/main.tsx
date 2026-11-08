@@ -28,7 +28,7 @@ const getToken = createTokenProvider(() => account, authMode === 'demo' ? undefi
     if (!firebaseSession) throw Error('AUTH_UNAVAILABLE');
     return firebaseSession.token();
 });
-const subscribeStaffSupport = (receive: (value: unknown) => void) => subscribeSupport(getToken, undefined, receive);
+const subscribeStaffSupport = (receive: (value: unknown) => void, status: (connected: boolean) => void) => subscribeSupport(getToken, undefined, receive, status);
 async function api(path: string, method = 'GET', body?: unknown) {
     const r = await fetch(`/api/v1${path}`, { method, headers: { Authorization: `Bearer ${await getToken()}`, ...(body instanceof FormData ? {} : { 'Content-Type': 'application/json' }) }, ...(body === undefined ? {} : { body: body instanceof FormData ? body : JSON.stringify(body) }) });
     const data = await r.json();
