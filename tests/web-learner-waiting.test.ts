@@ -91,3 +91,54 @@ test('送信待ちの手伝ってが残っている間は待ち表示を解除�
     assert.match(text(tree), /職員をよんでいます/);
     assert.equal(readSafety((globalThis as any).localStorage, h.key).waiting, true);
 });
+
+test('再開前の取得を待つ間に停止すると再開要求を送らず手順を閉じる', async () => {
+    const h = harness();
+    h.setWaiting();
+    let tree = h.render(); await hooks.flush(); tree = h.render(); await hooks.flush(); tree = h.render();
+    let resolveLoad!: (value: unknown) => void;
+    const pendingLoad = new Promise(resolve => { resolveLoad = resolve; });
+    let posts = 0;
+    (globalThis as any).learnerApi = async (_path: string, method = 'GET') => {
+        if (method === 'POST') { posts++; return {}; }
+        return pendingLoad;
+    };
+    const resume = nodes(tree).find(node => node.type === 'button' && text(node).includes('つづける'));
+    const work = resume.props.onClick();
+    const stop = nodes(tree).find(node => node.type === 'button' && text(node).includes('やめる'));
+    stop.props.onClick();
+    resolveLoad({ sessionId: 's1', releaseId: 'r', status: 'waiting_help', stepIndex: 0, revision: 5, steps: [] });
+    await work; await settle();
+    tree = h.render();
+    assert.equal(posts, 0);
+    assert.match(text(tree), /作業をやめました/);
+    assert.doesNotMatch(text(tree), /折る/);
+    assert.equal(readSafety((globalThis as any).localStorage, h.key).stopped, true);
+});
+
+test('開始要求中の停止はセッション取得後に保存され、送信失敗しても残る', async () => {
+    const h = harness();
+    let resolveStart!: (value: unknown) => void;
+    const pendingStart = new Promise(resolve => { resolveStart = resolve; });
+    (globalThis as any).learnerApi = async (path: string, method = 'GET') => {
+        if (path === '/me/assignments') return { assignments: [{ taskId: 't', title: '作業' }] };
+        if (path === '/me/sessions' && method === 'POST') return pendingStart;
+        throw Error('offline');
+    };
+    const render = () => { hooks.begin(); return Learner({ uid: 'learner-a', path: '/me', action: async (fn: any) => fn() }); };
+    let tree = render(); await hooks.flush(); tree = render();
+    const start = nodes(tree).find(node => node.type === 'button' && text(node).includes('はじめる'));
+    start.props.onClick();
+    const stop = nodes(tree).find(node => node.type === 'button' && text(node).includes('やめる'));
+    stop.props.onClick();
+    const help = nodes(tree).find(node => node.type === 'button' && text(node).includes('手伝って'));
+    help.props.onClick();
+    resolveStart({ sessionId: 's1', revision: 3 });
+    await settle();
+    tree = render(); await hooks.flush();
+    const safety = readSafety((globalThis as any).localStorage, h.key);
+    assert.equal(safety.stopped, true);
+    assert.equal(safety.pending.length, 1);
+    assert.equal(safety.pending[0].type, 'stop');
+    assert.match(text(tree), /作業をやめました/);
+});

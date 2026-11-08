@@ -23,6 +23,9 @@ export function readSafety(store: Store, key: string): SafetyState {
 // Persist before issuing a network request; stopped is retained after acknowledgement.
 export function hold(store: Store, key: string, event: SafetyEvent) {
     const s = readSafety(store, key);
+    // Repeated taps must not create new stop IDs, including after acknowledgement.
+    if (s.stopped)
+        return s;
     if (event.type === 'stop')
         s.stopped = true;
     else
@@ -39,6 +42,8 @@ export function delivered(store: Store, key: string, eventId: string) {
 }
 export function clearWaiting(store: Store, key: string) {
     const s = readSafety(store, key);
+    if (s.stopped)
+        return;
     s.waiting = false;
     store.setItem(key, JSON.stringify(s));
 }

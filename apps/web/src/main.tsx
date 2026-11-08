@@ -415,9 +415,9 @@ function Learner({ uid, path, action }: {
     }, [uid, sessionId, safety.waiting, safety.stopped, session?.status]);
     const requestSafety = (type: 'help' | 'stop') => {
         if (!sessionId) {
-            pendingHomeSafety.current = type;
+            if (pendingHomeSafety.current !== 'stop') pendingHomeSafety.current = type;
             setHomeHalted(true);
-            setMessage(type === 'stop' ? '作業をやめました' : '近くの職員をよんでください');
+            setMessage(pendingHomeSafety.current === 'stop' ? '作業をやめました' : '近くの職員をよんでください');
             return;
         }
         hold(localStorage, key, { clientEventId: crypto.randomUUID(), expectedRevision: session?.revision ?? 0, type });
@@ -446,10 +446,8 @@ function Learner({ uid, path, action }: {
                         const s = await api('/me/sessions', 'POST', { taskId: a.taskId, clientRequestId: crypto.randomUUID() });
                         if (pendingHomeSafety.current) {
                             // 開始を待つ間に「やめる／手伝って」が押されていたら手順へ進まず、意図を先に送る（停止優先）
-                            try {
-                                await api(`/me/sessions/${s.sessionId}/events`, 'POST', { clientEventId: crypto.randomUUID(), expectedRevision: s.revision, type: pendingHomeSafety.current });
-                            }
-                            catch { /* 送信に失敗しても画面は止めたままにする */ }
+                            hold(localStorage, safetyKey(uid, s.sessionId), { clientEventId: crypto.randomUUID(), expectedRevision: s.revision, type: pendingHomeSafety.current });
+                            setSafetyTick(x => x + 1);
                             return;
                         }
                         go(`/me/sessions/${s.sessionId}`);
@@ -459,8 +457,10 @@ function Learner({ uid, path, action }: {
                     }
                 })}>{learnerControlContent('はじめる')}</button></section>) : <p>職員をよんでください</p>)}</> : safety.stopped || session?.status === 'stopped' ? <section><h1>作業をやめました</h1><p>職員と そうだんしてください</p><p role="status">{message}</p></section> : safety.waiting || session?.status === 'waiting_help' ? <section><h1>職員をよんでいます</h1><p role="status">{message}</p><button disabled={busy || safety.pending.length > 0 || !session} onClick={() => void action(async () => {
                 const fresh = await api(`/me/sessions/${sessionId}`);
+                if (readSafety(localStorage, key).stopped) return;
                 setSession(fresh);
                 await api(`/me/sessions/${sessionId}/events`, 'POST', { clientEventId: crypto.randomUUID(), expectedRevision: fresh.revision, type: 'resume' });
+                if (readSafety(localStorage, key).stopped) return;
                 clearWaiting(localStorage, key);
                 setSession(await api(`/me/sessions/${sessionId}`));
             })}>{learnerControlContent('つづける')}</button></section> : session?.status === 'completed' ? <section><h1>おわりました</h1><p>職員をよんでください</p></section> : session ? <section><p className="position">{session.stepIndex + 1} / {session.steps.length}</p><Asset id={step!.imageAssetId} alt={step!.imageAltText}/>{step!.text !== undefined && <h1>{step!.text}</h1>}{step!.audioAssetId && <Asset key={step!.audioAssetId} id={step!.audioAssetId} audio/>}{step!.visibleCaution !== undefined && <p>{step!.visibleCaution}</p>}<div className="controls"><button disabled={busy || session.stepIndex === 0} onClick={() => void action(() => event('back'))}>{learnerControlContent('もどる')}</button><button className="primary" disabled={busy} onClick={() => void action(() => event(session.stepIndex === session.steps.length - 1 ? 'complete' : 'next'))}>{learnerControlContent(session.stepIndex === session.steps.length - 1 ? 'おわる' : 'つぎへ')}</button></div></section> : <p>読み込み中です</p>}<div className="safety"><button className="help" onClick={() => requestSafety('help')} disabled={safety.stopped || session?.status === 'stopped'}>{learnerControlContent('手伝って')}</button><button className="stop" onClick={() => requestSafety('stop')}>{learnerControlContent('やめる')}</button></div></div>;
