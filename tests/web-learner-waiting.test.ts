@@ -25,6 +25,7 @@ import {learnerSupportNotificationSchema} from ${JSON.stringify(new URL('../pack
 let account = 'learner-a';
 const api=(...args)=>globalThis.learnerApi(...args); const go=()=>{}; const Asset=()=>null;
 const subscribeSupport=()=>()=>{};
+const getToken = async () => account;
 export ${source}`;
 const compiled = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
 const { Learner } = await import('data:text/javascript;base64,' + Buffer.from(compiled).toString('base64'));
