@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { releaseCopyRequestSchema, releaseCopyResponseSchema, draftDetailSchema, editedStepSchema, eventSchema, generationRequestSchema, approvalRequestSchema, releaseSchema, draftPatchSchema, sessionStartSchema, normalizeRelease, projectReleaseToSessionSteps, learnerSessionSchema, type Member } from '../../../packages/shared/src/index.ts';
 import { learnerProfileCreateRequestSchema, learnerProfileUpdateRequestSchema, learnerProfileDetailSchema, learnerProfileListResponseSchema, toLearnerProfileSummary } from '../../../packages/shared/src/learner-profile.ts';
 import { supportResumeRequestSchema, supportResumeResponseSchema, supportRecordSchema, supportRecordSaveRequestSchema, supportOperationRequestSchema, supportStartResponseSchema, supportAcknowledgeResponseSchema, supportClaimResponseSchema, supportRequestListResponseSchema, supportRequestStatusQuerySchema } from '../../../packages/shared/src/support.ts';
+import { draftCorrectionSchema, correctionsListResponseSchema } from '../../../packages/shared/src/generation.ts';
 import { MemoryRepository, seed, doc, id, now, type Repository, type Storage, type Auth, type Doc } from './adapters.ts';
 import { configuredAuth } from './firebase-auth.ts';
 import { configuredStorage } from './cloud-storage.ts';
@@ -295,6 +296,18 @@ export function createApp(options: {
                 fail(409, 'REVISION_CONFLICT');
             await validSteps(d, input.editedSteps, res);
             const previousSteps = new Map<string, { step: z.infer<typeof editedStepSchema>; index: number }>(d.editedSteps.map((step: z.infer<typeof editedStepSchema>, index: number) => [step.stepId, { step, index }]));
+            const currentSteps = new Map(input.editedSteps.map((step, index) => [step.stepId, { step, index }]));
+            const changedFields = ['text', 'visibleCaution', 'imageAltText', 'imageAssetId', 'sourceStartMs', 'sourceEndMs', 'frameMs', 'verifiedObservation', 'verifiedSpeech', 'coaching', 'completionCheck'] as const;
+            const changes: z.infer<typeof draftCorrectionSchema>['changes'] = [];
+            for (const stepId of new Set([...previousSteps.keys(), ...currentSteps.keys()])) {
+                const before = previousSteps.get(stepId), after = currentSteps.get(stepId);
+                for (const field of changedFields) {
+                    const oldValue = before?.step[field] ?? null, newValue = after?.step[field] ?? null;
+                    if (oldValue !== newValue) changes.push({ stepId, field, before: oldValue, after: newValue });
+                }
+                const oldPosition = before?.index ?? null, newPosition = after?.index ?? null;
+                if (oldPosition !== newPosition) changes.push({ stepId, field: 'position', before: oldPosition, after: newPosition });
+            }
             const reviewChecks: typeof input.reviewChecks = { ...input.reviewChecks, steps: {} };
             if ((displayMode ?? d.displayMode ?? 'photo_text') !== (d.displayMode ?? 'photo_text') ||
                 (audioGuidance ?? d.audioGuidance ?? false) !== (d.audioGuidance ?? false) ||
@@ -320,9 +333,28 @@ export function createApp(options: {
             await db.put('drafts', {
                 ...d, ...(displayMode !== undefined ? { displayMode } : {}), ...(audioGuidance !== undefined ? { audioGuidance } : {}), ...(appliedSupportRecordRefs !== undefined ? { appliedSupportRecordRefs } : {}), ...(correctionReason !== undefined ? { correctionReason } : {}), editedSteps: input.editedSteps, reviewChecks, modificationCount, revision: d.revision + 1, updatedBy: member(res).uid
             });
+            if (changes.length) {
+                const correction = doc(member(res).orgId, { taskId: d.taskId, learnerId: d.learnerId, draftId: d.id,
+                    draftRevision: d.revision + 1, changes, ...(correctionReason !== undefined ? { reason: correctionReason } : {}), createdBy: member(res).uid });
+                const { id: correctionId, orgId: _orgId, ...details } = correction;
+                draftCorrectionSchema.parse({ ...details, schemaVersion: '1', correctionId });
+                await db.put('draftCorrections', correction);
+            }
             return { revision: d.revision + 1, reviewChecks };
         });
         send(res, result);
+    });
+    api.get('/learners/:learnerId/work-guides/:taskId/corrections', async (req, res) => {
+        staff(res);
+        await get('learners', req.params.learnerId, res);
+        await get('tasks', req.params.taskId, res);
+        const entries = (await list('draftCorrections', res)).filter(c => c.learnerId === req.params.learnerId && c.taskId === req.params.taskId);
+        const jobs = await list('generationJobs', res);
+        const corrections = entries.map(({ id, orgId, ...entry }) => {
+            const job = jobs.find(j => j.id === entry.contextJobId && j.kind === 'correction_context');
+            return { ...entry, schemaVersion: '1', correctionId: id, ...(job ? { contextJobStatus: job.status } : {}) };
+        }).sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.correctionId.localeCompare(b.correctionId));
+        res.json(correctionsListResponseSchema.parse({ corrections }));
     });
     api.post('/drafts/:id/frames', async (req, res) => {
         staff(res);
