@@ -25,6 +25,7 @@ source = `import React, {useState,useEffect,useRef} from ${JSON.stringify(hookUr
 import {missingDraftChecks,draftPreviewMode,savedDraftReview} from ${JSON.stringify(new URL('../apps/web/src/draft-review.ts', import.meta.url).href)};
 import {isManualDraft,releaseCopySource,beginReleaseCopy} from ${JSON.stringify(new URL('../apps/web/src/release-copy.ts', import.meta.url).href)};
 import {releaseCopyResponseSchema} from ${JSON.stringify(new URL('../packages/shared/src/index.ts', import.meta.url).href)};
+const ImprovementReview=()=>null;
 const api=(...args)=>globalThis.draftApi(...args); const go=(path)=>globalThis.draftGo?.(path); const Asset=()=>null;
 export ${source}`;
 const compiled = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
