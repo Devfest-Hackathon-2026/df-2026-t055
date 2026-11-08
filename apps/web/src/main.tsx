@@ -87,6 +87,7 @@ function Staff({ path, action }: {
         });
     }, [path]);
     const draftMatch = path.match(/\/drafts\/([^/]+)/);
+    // 職員画面はパスで振り分ける。新しい画面はここへ追加し、既存の分岐は残す。
     if (draftMatch)
         return <Draft key={draftMatch[1]} id={draftMatch[1]} action={action}/>;
     if (path === '/staff/support')

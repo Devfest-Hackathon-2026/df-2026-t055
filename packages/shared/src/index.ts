@@ -1,3 +1,4 @@
+// 共有契約の集約点。分野別の契約を専用ファイルへ分けるときは、ここから再exportして既存の参照を保つ。競合時は両側の追加を残す。
 import { z } from 'zod';
 export const schemaVersion = '1' as const;
 const time = z.number().int().nonnegative();

@@ -83,6 +83,7 @@ export function createApp(options: {
     const list = async (c: string, res: Response) => (await db.all(c)).filter(x => x.orgId === member(res).orgId);
     const send = (res: Response, data: object, status = 200) => res.status(status).json({ schemaVersion: '1', ...data });
     const staff = (res: Response) => role(res, 'staff');
+    // ルートは対象ごとにまとめる。新しいルートは対象のまとまりへ追加し、競合時は両側のルートを残す。
     api.post('/tasks', async (req, res) => {
         staff(res);
         const { title } = z.object({ title: z.string().min(1).max(100) }).strict().parse(req.body);
