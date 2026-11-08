@@ -73,3 +73,45 @@ test('20工程すべてを入れ替えても追加と削除の最大480項目を
     assert.equal((await h.request('/drafts/draft', 'PATCH', { expectedRevision: 1, editedSteps: newSteps, reviewChecks: h.checks })).status, 200);
     assert.equal(h.db.all('draftCorrections')[0].changes.length, 480);
 });
+
+test('reference notes are isolated by correction revision and exclude private fields', async () => {
+    const { createWorker } = await import('../apps/generator/src/worker.ts');
+    const { FakeModel } = await import('../apps/generator/src/model.ts');
+    const { LocalStorage } = await import('../apps/api/src/adapters.ts');
+    const h = harness();
+    h.db.put('tasks', { ...h.db.get('tasks', 'task')!, title: '作業' });
+    const first = [{ ...h.steps[0], text: '赤い線' }, h.steps[1]];
+    assert.equal((await h.request('/drafts/draft', 'PATCH', { expectedRevision: 1, editedSteps: first, reviewChecks: h.checks, correctionReason: 'private reason' })).status, 200);
+    const second = [{ ...first[0], text: '青い線' }, first[1]];
+    assert.equal((await h.request('/drafts/draft', 'PATCH', { expectedRevision: 2, editedSteps: second, reviewChecks: h.checks })).status, 200);
+    const corrections = h.db.all('draftCorrections');
+    assert.equal(corrections.length, 2);
+    let captured: any;
+    const run = createWorker(h.db, new LocalStorage(), new FakeModel(), 30, { async generate(input) { captured = input; return { editSummary: input.changes[0].after, nextDraftHint: '確認', reviewFlags: [] }; } });
+    await run(corrections[1].contextJobId);
+    await run(corrections[0].contextJobId);
+    assert.deepEqual(captured, { title: '作業', changes: [{ field: 'text', before: '折る', after: '赤い線' }] });
+    assert.equal(JSON.stringify(captured).includes('private reason'), false);
+    assert.equal(h.db.get('draftCorrections', corrections[0].id)!.contextSummary.editSummary, '赤い線');
+    assert.equal(h.db.get('draftCorrections', corrections[1].id)!.contextSummary.editSummary, '青い線');
+    assert.equal(h.db.get('drafts', 'draft')!.editedSteps[0].text, '青い線');
+});
+
+test('pause and invalid model output do not block or undo editing', async () => {
+    const { createWorker } = await import('../apps/generator/src/worker.ts');
+    const { FakeModel } = await import('../apps/generator/src/model.ts');
+    const { LocalStorage } = await import('../apps/api/src/adapters.ts');
+    const h = harness(); h.db.put('tasks', { ...h.db.get('tasks', 'task')!, title: '作業' });
+    h.db.put('operations', doc('demo', { id: 'generation-control', enabled: false }));
+    const first = [{ ...h.steps[0], text: '一回目' }, h.steps[1]];
+    assert.equal((await h.request('/drafts/draft', 'PATCH', { expectedRevision: 1, editedSteps: first, reviewChecks: h.checks })).status, 200);
+    assert.equal(h.db.all('generationJobs').length, 0);
+    h.db.put('operations', { ...h.db.get('operations', 'generation-control')!, enabled: true });
+    const second = [{ ...first[0], text: '二回目' }, first[1]];
+    assert.equal((await h.request('/drafts/draft', 'PATCH', { expectedRevision: 2, editedSteps: second, reviewChecks: h.checks })).status, 200);
+    const job = h.db.all('generationJobs')[0];
+    await createWorker(h.db, new LocalStorage(), new FakeModel(), 30, { async generate() { return { editSummary: 'invalid' }; } })(job.id);
+    assert.equal(h.db.get('generationJobs', job.id)!.status, 'failed');
+    assert.equal(h.db.get('drafts', 'draft')!.status, 'editing');
+    assert.equal(h.db.get('drafts', 'draft')!.editedSteps[0].text, '二回目');
+});
