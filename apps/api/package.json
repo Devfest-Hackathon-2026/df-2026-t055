@@ -4,5 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "node --experimental-transform-types --watch src/server.ts"
+  },
+  "dependencies": {
+    "@google-cloud/firestore": "^9.4.0"
   }
 }
