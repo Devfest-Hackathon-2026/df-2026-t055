@@ -384,14 +384,17 @@ export function createApp(options: {
         if (!r || r.orgId !== s.orgId || r.learnerId !== s.learnerId)
             fail(403, 'RELEASE_FORBIDDEN');
         const release = savedRelease(r);
+        // 旧承認版は audioGuidance を保存していない。読み上げは版に承認済み音声が
+        // ある工程に限る（正本第3節）ため、設定がない版は音声資産の有無で決める。
+        const audioGuidance = r.audioGuidance ?? release.learnerSteps.some(s => s.audioAssetId !== undefined);
         const steps = projectReleaseToSessionSteps(release).map(step => {
-            if (release.audioGuidance) return step;
+            if (audioGuidance) return step;
             const { audioAssetId, ...silent } = step;
             return silent;
         });
         return learnerSessionSchema.parse({
             schemaVersion: '1', sessionId: s.id, releaseId: release.releaseId,
-            displayMode: release.displayMode, audioGuidance: release.audioGuidance, steps,
+            displayMode: release.displayMode, audioGuidance, steps,
             status: s.status, stepIndex: s.stepIndex, revision: s.revision
         });
     }

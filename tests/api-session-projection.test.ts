@@ -61,7 +61,7 @@ for (const audioGuidance of [false, true]) test(`写真のみの固定版を本�
     assert.deepEqual(await h.load(session.sessionId), session);
 });
 
-test('保存済み旧版は写真と短文・音声なし・工程文の代替テキストで返す', async () => {
+test('保存済み旧版は写真と短文・承認済み音声つき・工程文の代替テキストで返す', async () => {
     const h = await harness();
     const { releaseId } = await h.approve();
     const release = h.db.get('releases', releaseId)!;
@@ -71,7 +71,32 @@ test('保存済み旧版は写真と短文・音声なし・工程文の代替�
     delete release.audioGuidance;
     for (const step of release.learnerSteps) {
         delete step.imageAltText;
-        step.audioAssetId = 'synthetic-stale-audio';
+        step.audioAssetId = 'synthetic-approved-audio';
+    }
+    h.db.put('releases', release);
+    await h.assign(releaseId);
+    const session = await h.start();
+    learnerSessionSchema.parse(session);
+    assert.equal(session.displayMode, 'photo_text');
+    assert.equal(session.audioGuidance, true);
+    assert.equal(session.steps[0].text, h.draft.editedSteps[0].text);
+    assert.equal(session.steps[0].imageAltText, session.steps[0].text);
+    assert.equal(session.steps[0].visibleCaution, h.draft.editedSteps[0].visibleCaution);
+    assert.equal(session.steps[0].audioAssetId, 'synthetic-approved-audio');
+    assert.deepEqual(await h.load(session.sessionId), session);
+});
+
+test('保存済み旧版で承認済み音声がなければ音声なしで返す', async () => {
+    const h = await harness();
+    const { releaseId } = await h.approve();
+    const release = h.db.get('releases', releaseId)!;
+    delete release.schemaVersion;
+    delete release.appliedSupportRecordRefs;
+    delete release.displayMode;
+    delete release.audioGuidance;
+    for (const step of release.learnerSteps) {
+        delete step.imageAltText;
+        delete step.audioAssetId;
     }
     h.db.put('releases', release);
     await h.assign(releaseId);
@@ -79,9 +104,7 @@ test('保存済み旧版は写真と短文・音声なし・工程文の代替�
     learnerSessionSchema.parse(session);
     assert.equal(session.displayMode, 'photo_text');
     assert.equal(session.audioGuidance, false);
-    assert.equal(session.steps[0].text, h.draft.editedSteps[0].text);
     assert.equal(session.steps[0].imageAltText, session.steps[0].text);
-    assert.equal(session.steps[0].visibleCaution, h.draft.editedSteps[0].visibleCaution);
     assert.ok(!('audioAssetId' in session.steps[0]));
     assert.deepEqual(await h.load(session.sessionId), session);
 });
