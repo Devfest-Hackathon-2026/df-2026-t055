@@ -175,6 +175,7 @@ export function createApp(options: {
         });
         res.json(workGuideRecordsResponseSchema.parse({ schemaVersion: '1', records: result }));
     });
+    api.get('/identity', (_req, res) => { const m = member(res); send(res, { uid: m.uid, role: m.role }); });
     // ルートは対象ごとにまとめる。新しいルートは対象のまとまりへ追加し、競合時は両側のルートを残す。
     api.post('/tasks', async (req, res) => {
         staff(res);

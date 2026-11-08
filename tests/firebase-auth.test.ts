@@ -150,3 +150,20 @@ test('member CLI uses an explicit repository module and never prints account arg
         });
     } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+test('Firebase ADC binding is selected only with an explicit project and org', () => {
+    const { db } = setup();
+    assert.ok(configuredAuth(db, { AUTH_BACKEND: 'firebase', FIREBASE_PROJECT_ID: 't055-test-project', FIRESTORE_ORG_ID: 'demo' }) instanceof FirebaseAuth);
+    assert.throws(() => configuredAuth(db, { AUTH_BACKEND: 'firebase', FIREBASE_PROJECT_ID: 't055-test-project' }), /FIREBASE_ORG_ID_REQUIRED/);
+});
+
+test('identity endpoint returns only the verified UID and role', async () => {
+    const { db, auth } = setup();
+    const app = createApp({ db, auth }).app;
+    const get = (token: string) => app.fetch(new Request('http://localhost/api/v1/identity', { headers: { authorization: `Bearer ${token}` } }));
+    const staff = await get('staff'); assert.equal(staff.status, 200);
+    assert.deepEqual(await staff.json(), { schemaVersion: '1', uid: 'staff', role: 'staff' });
+    assert.equal((await get('invalid')).status, 401);
+    const learner = await get('learner-a');
+    assert.deepEqual(await learner.json(), { schemaVersion: '1', uid: 'learner-a', role: 'learner' });
+});

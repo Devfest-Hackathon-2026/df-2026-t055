@@ -1,5 +1,7 @@
 import { DemoAuth, type Auth, type Repository, type Doc } from './adapters.ts';
 import type { Member } from '../../../packages/shared/src/index.ts';
+import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 
 // The SDK binding must verify signature, issuer, audience and revocation; never decode an unverified JWT.
 export interface FirebaseTokenClient {
@@ -43,6 +45,13 @@ export function configuredAuth(db: Repository, env: NodeJS.ProcessEnv = process.
         return new DemoAuth(db);
     }
     if (backend !== 'firebase') throw Error('INVALID_AUTH_BACKEND');
-    if (!client) throw Error('FIREBASE_CLIENT_NOT_CONFIGURED');
+    if (!client) {
+        if (env.NODE_ENV === 'production' && process.env.FIREBASE_AUTH_EMULATOR_HOST) throw Error('FIREBASE_EMULATOR_DISABLED');
+        const projectId = env.FIREBASE_PROJECT_ID?.trim() || env.GOOGLE_CLOUD_PROJECT?.trim();
+        if (!projectId) throw Error('FIREBASE_CLIENT_NOT_CONFIGURED');
+        const appName = `t055-${projectId}`;
+        const app = getApps().find(a => a.name === appName) ?? initializeApp({ projectId, credential: applicationDefault() }, appName);
+        client = getAuth(app);
+    }
     return new FirebaseAuth(db, client, env.FIRESTORE_ORG_ID ?? '');
 }
