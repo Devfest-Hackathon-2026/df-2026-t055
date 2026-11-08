@@ -60,15 +60,18 @@ test('一覧を契約へ投影し、既定の状態と単一statusで絞る', as
     const q = await h.support();
     assert.equal(q.revision, 1);
     assert.deepEqual(await h.list(), [{ schemaVersion: '1', requestId: q.id, sessionId: q.sessionId,
-        eventId: q.eventId, createdAt: q.createdAt, kind: 'help', status: 'open', revision: 1 }]);
+        eventId: q.eventId, learnerId: 'a', stepId: 's1', createdAt: q.createdAt, kind: 'help', status: 'open', revision: 1 }]);
     await h.claim(q.id);
     const assigned = h.db.get('supportRequests', q.id)!;
+    // 開始APIは後続チケットの範囲のため、ここでは開始済み状態への到達だけを直接用意する。
     const started = { ...assigned, status: 'in_progress', startedBy: 'staff', startedAt: assigned.assignedAt, revision: 3 };
     h.db.put('supportRequests', started);
     const progressing = (await h.list())[0];
     assert.ok('startedBy' in progressing);
     assert.equal(progressing.startedBy, 'staff');
-    h.db.put('supportRequests', { ...started, status: 'acknowledged', acknowledgedBy: 'staff', acknowledgedAt: assigned.assignedAt, revision: 4 });
+    assert.equal(progressing.learnerId, 'a');
+    assert.equal(progressing.stepId, 's1');
+    await h.request(`/support-requests/${q.id}/acknowledge`, 'POST', {});
     assert.deepEqual(await h.list(), []);
     assert.equal((await h.list('?status=acknowledged'))[0].status, 'acknowledged');
     const stop = await h.support('stop');

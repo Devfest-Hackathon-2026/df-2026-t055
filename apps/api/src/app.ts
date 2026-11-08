@@ -553,7 +553,7 @@ export function createApp(options: {
             .filter(q => status ? q.status === status : ['open', 'assigned', 'in_progress'].includes(q.status))
             .map(q => ({
                 schemaVersion: '1', requestId: q.id, sessionId: q.sessionId, eventId: q.eventId,
-                kind: q.kind, status: q.status, revision: q.revision, createdAt: q.createdAt,
+                learnerId: q.learnerId, stepId: q.stepId, kind: q.kind, status: q.status, revision: q.revision, createdAt: q.createdAt,
                 ...(q.kind === 'help' && q.status !== 'open' ? { assignedTo: q.assignedTo, assignedAt: q.assignedAt } : {}),
                 ...(q.kind === 'help' && ['in_progress', 'acknowledged'].includes(q.status) ? { startedBy: q.startedBy, startedAt: q.startedAt } : {}),
                 ...(q.status === 'acknowledged' ? { acknowledgedBy: q.acknowledgedBy, acknowledgedAt: q.acknowledgedAt } : {})

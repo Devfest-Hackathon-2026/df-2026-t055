@@ -28,7 +28,7 @@ Issue #26 の型の定義であり API・WebSocket実装済みではない。正
 
 help は open → assigned → in_progress → acknowledged だけを許可する。stop は open → acknowledged だけを許可する。段階飛ばし、逆戻り、acknowledged からの遷移は拒否する。再送の成功扱いは、新しい状態遷移とは別に判定する。
 
-help の各状態の例は [open](../fixtures/support/request-help-open.json)、[assigned](../fixtures/support/request-help-assigned.json)、[in_progress](../fixtures/support/request-help-in-progress.json)、[acknowledged](../fixtures/support/request-help-acknowledged.json)。stop の例は [open](../fixtures/support/request-stop-open.json)、[acknowledged](../fixtures/support/request-stop-acknowledged.json)。各要求は revision が1以上で、状態変更ごとに増加する。
+help の各状態の例は [open](../fixtures/support/request-help-open.json)、[assigned](../fixtures/support/request-help-assigned.json)、[in_progress](../fixtures/support/request-help-in-progress.json)、[acknowledged](../fixtures/support/request-help-acknowledged.json)。stop の例は [open](../fixtures/support/request-stop-open.json)、[acknowledged](../fixtures/support/request-stop-acknowledged.json)。各要求は revision が1以上で、状態変更ごとに増加する。各要求は本人と工程（learnerId・stepId）を常に含み、職員画面で誰のどの工程かを表示する。
 
 claim/start/acknowledge は共通の strict な空object要求を使う。clientRequestId、冪等キー、担当者や時刻を要求へ追加しない。担当者と時刻はサーバーが認証主体から確定する。同じ職員による再送では元の担当者と時刻を保つ。claim はトランザクションで最初に保存できた職員を担当者とし、別の職員との担当競合は409にする。help の開始・完了・職員側の再開は担当職員だけに許可する。stop の確認は同じ所属の職員に許可し、担当・開始情報は持たせない。
 

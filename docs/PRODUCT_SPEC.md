@@ -167,7 +167,7 @@ Firestore Native modeに構造化データ、非公開Cloud Storageに動画・�
 | `assignments` | `learnerId, taskId, releaseId, assignedBy, updatedAt` | 次回開始版へのポインタ。承認済みかつ本人ID一致の版だけを指す |
 | `sessions` | `learnerId, releaseId, status, stepIndex, revision, activeSupportRequestId?, startedAt, endedAt?` | 開始時に版を固定。支援待ちでは対象の要求IDを保存する。進行はイベントと同一トランザクションで更新 |
 | `sessionEvents` | `sessionId, clientEventId, type, stepId?, createdBy, receivedAt` | 進行・支援要求・停止・完了を追記。clientEventIdで重複排除 |
-| `supportRequests` | `sessionId, eventId, kind: help / stop, status: open / assigned / in_progress / acknowledged, revision, assignedTo?, assignedAt?, startedBy?, startedAt?, acknowledgedBy?, acknowledgedAt?` | 職員の支援一覧用。担当決定・到着と開始・完了を別々に記録する。状態変更ごとにrevisionを増やす。停止イベントの通知にも使う |
+| `supportRequests` | `sessionId, eventId, learnerId, stepId, kind: help / stop, status: open / assigned / in_progress / acknowledged, revision, assignedTo?, assignedAt?, startedBy?, startedAt?, acknowledgedBy?, acknowledgedAt?` | 職員の支援一覧用。担当決定・到着と開始・完了を別々に記録する。状態変更ごとにrevisionを増やす。停止イベントの通知にも使う |
 | `supportRecords` | `supportRequestId, learnerId, taskId, releaseId, stepId, sessionId, observedDifficulty, assistanceGiven, improvementSuggestion, createdBy, updatedBy, updatedAt, revision` | 支援要求ごとに1件。対象IDはサーバーが要求とセッションから確定する。記録の参照は `{recordId, revision}` で行う |
 | `draftCorrections` | `taskId, learnerId, draftId, draftRevision, changes:[{stepId,field,before,after}], reason?, createdBy, contextJobId?, contextSummary?` | 職員が保存した修正を記録する。修正前後の値はサーバーが確定し、履歴を保持する。要約結果はその履歴にだけ保存し、遅く完了した処理で新しい修正を上書きしない |
 | `handoverReads` | `releaseId, newcomerUid, readAt` | 承認版を読んだ記録 |
