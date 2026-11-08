@@ -58,7 +58,10 @@ test('tenant checks cover queries, reads, creates and overwrite races; binary an
     const a = new FirestoreRepository(client, 'demo'), b = new FirestoreRepository(client, 'other');
     await b.put('items', doc('other', { id: 'foreign' }));
     assert.deepEqual(await a.all('items'), []);
-    await assert.rejects(a.get('items', 'foreign'), /ORG_FORBIDDEN/);
+    const foreign = await a.get('items', 'foreign').then(() => undefined, (error: any) => error);
+    assert.match(foreign.message, /ORG_FORBIDDEN/);
+    assert.equal(foreign.status, 403);
+    assert.equal(foreign.code, 'ORG_FORBIDDEN');
     await assert.rejects(a.put('items', doc('other', { id: 'new' })), /ORG_FORBIDDEN/);
     await assert.rejects(a.put('items', doc('demo', { id: 'foreign' })), /ORG_FORBIDDEN/);
     await assert.rejects(a.put('items', doc('demo', { bytes: Buffer.from('image') })), /INVALID_FIRESTORE_METADATA/);
@@ -86,8 +89,18 @@ async function harness() {
     const tts = new FakeTtsAdapter();
     const app = createApp({ db, storage, tts: { async synthesize(text) { client.assertOutsideTransaction(); spoken++; return tts.synthesize(text); } } }).app;
     const request = (path: string, body: unknown) => app.fetch(new Request(`http://localhost/api/v1${path}`, { method: 'POST', headers: { authorization: 'Bearer staff', 'content-type': 'application/json' }, body: JSON.stringify(body) }));
-    return { client, db, storage, request, counts: () => ({ io, spoken }) };
+    return { client, db, storage, request, app, counts: () => ({ io, spoken }) };
 }
+test('他組織の本人をAPIで開くと403になり、存在しない本人とは区別する', async () => {
+    const h = await harness();
+    const other = new FirestoreRepository(h.client, 'other');
+    await other.put('learners', doc('other', { id: 'foreign-learner', displayName: '他組織', preferences: {} }));
+    const response = await h.app.fetch(new Request('http://localhost/api/v1/learners/foreign-learner', { headers: { authorization: 'Bearer staff' } }));
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).error.code, 'ORG_FORBIDDEN');
+    const missing = await h.app.fetch(new Request('http://localhost/api/v1/learners/missing', { headers: { authorization: 'Bearer staff' } }));
+    assert.equal(missing.status, 404);
+});
 test('API approval and manual copy retry only metadata, preserve approval idempotency and source', async () => {
     const h = await harness();
     await h.db.put('tasks', doc('demo', { id: 'task', videoAssetId: 'video' }));

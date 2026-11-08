@@ -23,6 +23,8 @@ export interface FirestoreClient {
     runTransaction<T>(fn: (transaction: FirestoreTransaction) => Promise<T>): Promise<T>;
 }
 type Context = { transaction: FirestoreTransaction; writes: Map<string, Map<string, Doc>> };
+// 他組織の文書へのアクセスは403にする。HTTP層は status・code を付けた Error をそのまま返す。
+function forbidden(): Error { return Object.assign(Error('ORG_FORBIDDEN'), { status: 403, code: 'ORG_FORBIDDEN' }); }
 function segment(value: string) {
     if (!value || value.includes('/') || value === '.' || value === '..')
         throw Error('INVALID_DOCUMENT_PATH');
@@ -45,7 +47,7 @@ export class FirestoreRepository implements Repository {
     private decode(snapshot: FirestoreSnapshot): Doc | undefined {
         const data = snapshot.data();
         if (!data) return undefined;
-        if (data.orgId !== this.orgId) throw Error('ORG_FORBIDDEN');
+        if (data.orgId !== this.orgId) throw forbidden();
         if (data.id !== snapshot.id || typeof data.createdAt !== 'string' || !data.createdAt)
             throw Error('INVALID_FIRESTORE_DOCUMENT');
         return structuredClone(data) as Doc;
@@ -67,7 +69,7 @@ export class FirestoreRepository implements Repository {
     }
     async put(collection: string, value: Doc): Promise<void> {
         this.collection(collection).doc(segment(value.id));
-        if (value.orgId !== this.orgId) throw Error('ORG_FORBIDDEN');
+        if (value.orgId !== this.orgId) throw forbidden();
         if (typeof value.createdAt !== 'string' || !value.createdAt) throw Error('INVALID_FIRESTORE_DOCUMENT');
         const clean = metadata(value) as Doc;
         if (!this.context.getStore()) return this.transaction(() => this.put(collection, clean));

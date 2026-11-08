@@ -785,7 +785,7 @@ export function createApp(options: {
         send(res, { status: 'processed' });
     });
     app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-        const status = err instanceof HttpError ? err.status : err instanceof z.ZodError || err.status === 422 || err.type === 'entity.parse.failed' ? 422 : 500;
+        const status = err instanceof HttpError ? err.status : typeof err.status === 'number' ? err.status : err instanceof z.ZodError || err.type === 'entity.parse.failed' ? 422 : 500;
         res.status(status).json({ error: { code: status === 500 ? 'INTERNAL_ERROR' : err.code ?? 'INVALID_INPUT', message: status === 500 ? '処理に失敗しました' : '操作を確認してください', requestId: res.locals.requestId } });
     });
     return {
