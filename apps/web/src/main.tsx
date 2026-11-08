@@ -317,9 +317,12 @@ function Learner({ uid, path, action }: {
             latestSupport.current = { sessionId, session: state.revision, requestId: state.support?.requestId ?? (state.revision === latest.session ? latest.requestId : ''), support: state.support?.revision ?? (state.revision === latest.session ? latest.support : -1) };
             setSession(previous => {
                 if (!previous || previous.releaseId !== state.releaseId || state.revision < previous.revision) return previous;
-                // Only a saved transition beyond the help revision can release the local wait.
+                // Release the local wait when the server shows the session active with no open
+                // support request: the help that caused the wait has been answered and the session
+                // resumed. Anchor on the request state, not on a revision increase seen after
+                // load, so a reload after resume also releases the wait.
                 const pending = readSafety(localStorage, key);
-                if (state.status === 'active' && state.revision > previous.revision && !pending.pending.length) clearWaiting(localStorage, key);
+                if (state.status === 'active' && !state.support && !pending.pending.length) clearWaiting(localStorage, key);
                 return { ...previous, status: state.status, stepIndex: state.stepIndex, revision: state.revision };
             });
             if (state.support) setMessage(state.support.status === 'open' ? '職員をよんでいます' : state.support.status === 'acknowledged' ? '対応が終わりました' : '担当の職員が決まりました');
