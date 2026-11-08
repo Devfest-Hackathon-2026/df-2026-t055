@@ -15,7 +15,7 @@ export async function flush(){for(const f of effects)f();await new Promise(r=>se
 const hookUrl = 'data:text/javascript;base64,' + Buffer.from(hooksSource).toString('base64');
 const hooks = await import(hookUrl);
 let source = await readFile(new URL('../apps/web/src/staff-work-guides.tsx', import.meta.url), 'utf8');
-source = source.replace("'react'", JSON.stringify(hookUrl)).replace("'../../../packages/shared/src/work-guides.ts'", JSON.stringify(new URL('../packages/shared/src/work-guides.ts', import.meta.url).href));
+source = source.replace("'./staff-improvement-request.tsx'", JSON.stringify('data:text/javascript,export const StaffImprovementRequest=()=>null')).replace("'react'", JSON.stringify(hookUrl)).replace("'../../../packages/shared/src/work-guides.ts'", JSON.stringify(new URL('../packages/shared/src/work-guides.ts', import.meta.url).href));
 const compiled = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
 const { StaffWorkGuides } = await import('data:text/javascript;base64,' + Buffer.from(compiled).toString('base64'));
 function nodes(tree: any): any[] { if (Array.isArray(tree)) return tree.flatMap(nodes); if (!React.isValidElement(tree)) return []; return [tree, ...nodes((tree.props as any).children)]; }

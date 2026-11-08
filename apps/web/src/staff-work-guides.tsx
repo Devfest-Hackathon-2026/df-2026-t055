@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { workGuideListResponseSchema } from '../../../packages/shared/src/work-guides.ts';
 import type { z } from 'zod';
+import { StaffImprovementRequest } from './staff-improvement-request.tsx';
 
 type WorkGuide = z.infer<typeof workGuideListResponseSchema>['items'][number];
 type Result = { learnerId: string; items: WorkGuide[]; error?: string };
 
-export function StaffWorkGuides({ learnerId, api, go }: { learnerId: string; api: (path: string) => Promise<unknown>; go: (path: string) => void }) {
+export function StaffWorkGuides({ learnerId, api, go }: { learnerId: string; api: (path: string, method?: string, body?: unknown) => Promise<any>; go: (path: string) => void }) {
     const [result, setResult] = useState<Result>();
+    const [improvement, setImprovement] = useState<{ learnerId: string; taskId: string; releaseId: string }>();
     useEffect(() => {
         let active = true, sequence = 0, running = false;
         const load = async () => {
@@ -34,7 +36,9 @@ export function StaffWorkGuides({ learnerId, api, go }: { learnerId: string; api
                 <p>未反映の支援記録：{item.unappliedCount}件</p>
                 <p>生成：{!item.latestGeneration ? '記録なし' : item.latestGeneration.status === 'queued' || item.latestGeneration.status === 'running' ? '生成中' : item.latestGeneration.status === 'failed' ? '生成失敗' : '生成完了'}</p>
                 <p>下書き：{!item.latestDraft ? 'なし' : item.latestDraft.status === 'generating' ? '生成中' : item.latestDraft.status === 'failed' ? '生成失敗' : item.latestDraft.status === 'editing' ? '職員の確認待ち' : '承認済み'}</p>
-                {item.assignment && <button onClick={() => go(`/staff/handover/releases/${encodeURIComponent(item.assignment!.releaseId)}`)}>次回版を見る</button>}
+                {item.assignment && <><button onClick={() => go(`/staff/handover/releases/${encodeURIComponent(item.assignment!.releaseId)}`)}>次回版を見る</button>
+                    <button onClick={() => setImprovement({ learnerId, taskId: item.taskId, releaseId: item.assignment!.releaseId })}>記録をもとに更新</button></>}
+                {improvement?.learnerId === learnerId && improvement.taskId === item.taskId && <StaffImprovementRequest key={`${learnerId}:${item.taskId}`} learnerId={learnerId} taskId={item.taskId} title={item.title} releaseId={improvement.releaseId} currentReleaseId={item.assignment?.releaseId} api={api} close={() => setImprovement(undefined)} changeRelease={() => { if (item.assignment) setImprovement({ learnerId, taskId: item.taskId, releaseId: item.assignment.releaseId }); }} go={go}/>}
             </article>)}
         </>}
     </section>;
