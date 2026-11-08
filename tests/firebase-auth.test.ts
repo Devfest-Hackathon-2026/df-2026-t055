@@ -93,6 +93,18 @@ test('member script links/unlinks fake UID atomically without changing role/org/
     }));
     assert.equal(results.filter(r => r.status === 'fulfilled').length, 1);
 });
+test('重複したUIDはunlinkで解消でき、linkは重複を拒否する', async () => {
+    const { db, auth } = setup();
+    db.put('members', doc('demo', { id: 'a', uid: 'duplicate', role: 'staff' }));
+    db.put('members', doc('demo', { id: 'b', uid: 'duplicate', role: 'staff' }));
+    assert.equal(await auth.verify('duplicate'), undefined);
+    await assert.rejects(manageMember(db, ['link', 'duplicate', 'a']), /MEMBER_LINK_CONFLICT/);
+    await manageMember(db, ['unlink', 'duplicate', 'b']);
+    assert.equal(db.get('members', 'b')!.uid, undefined);
+    assert.equal((await auth.verify('duplicate'))?.uid, 'duplicate');
+    await manageMember(db, ['unlink', 'duplicate', 'a']);
+    assert.equal(await auth.verify('duplicate'), undefined);
+});
 test('web token source reads current demo account and calls Firebase provider afresh', async () => {
     let account = 'staff', calls = 0;
     const demo = createTokenProvider(() => account);

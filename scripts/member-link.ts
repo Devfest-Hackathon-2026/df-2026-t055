@@ -11,7 +11,8 @@ export async function manageMember(db: Repository, args: string[]) {
         const member = await db.get('members', memberId);
         if (!member || !validMember({ ...member, uid })) throw Error('INVALID_MEMBER');
         const matches = (await db.all('members')).filter(m => m.uid === uid && m.id !== memberId);
-        if (matches.length || (member.uid && member.uid !== uid)) throw Error('MEMBER_LINK_CONFLICT');
+        // 重複の検査は紐づけ時だけにする。重複したUIDの解除は、紐づけを解く操作でしか解消できない。
+        if (operation === 'link' && (matches.length || (member.uid && member.uid !== uid))) throw Error('MEMBER_LINK_CONFLICT');
         if (operation === 'unlink') {
             if (member.uid !== uid) throw Error('MEMBER_LINK_NOT_FOUND');
             const { uid: removed, ...unlinked } = member;
