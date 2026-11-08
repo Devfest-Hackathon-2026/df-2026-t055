@@ -1,0 +1,162 @@
+{
+  "schemaVersion": "1",
+  "steps": [
+    {
+      "stepId": "s01",
+      "startMs": 0,
+      "endMs": 10909,
+      "frameMs": 6545,
+      "observationCandidate": "開発用fixture：実動画を照合して修正してください",
+      "speechCandidate": "",
+      "instructionDraft": "タオルを ひろげます",
+      "coachingDraft": "手を動かす前に待ち、必要なところで声をかける",
+      "completionCheckDraft": "原動画の完成見本と照合する",
+      "reviewFlags": [
+        "開発用候補。実際の動作・原音と照合が必要"
+      ]
+    },
+    {
+      "stepId": "s02",
+      "startMs": 10909,
+      "endMs": 21818,
+      "frameMs": 17454,
+      "observationCandidate": "開発用fixture：実動画を照合して修正してください",
+      "speechCandidate": "",
+      "instructionDraft": "はしを おさえます",
+      "coachingDraft": "手を動かす前に待ち、必要なところで声をかける",
+      "completionCheckDraft": "原動画の完成見本と照合する",
+      "reviewFlags": [
+        "開発用候補。実際の動作・原音と照合が必要"
+      ]
+    },
+    {
+      "stepId": "s03",
+      "startMs": 21818,
+      "endMs": 32727,
+      "frameMs": 28363,
+      "observationCandidate": "開発用fixture：実動画を照合して修正してください",
+      "speechCandidate": "",
+      "instructionDraft": "はんぶんに おります",
+      "coachingDraft": "手を動かす前に待ち、必要なところで声をかける",
+      "completionCheckDraft": "原動画の完成見本と照合する",
+      "reviewFlags": [
+        "開発用候補。実際の動作・原音と照合が必要"
+      ]
+    },
+    {
+      "stepId": "s04",
+      "startMs": 32727,
+      "endMs": 43636,
+      "frameMs": 39272,
+      "observationCandidate": "開発用fixture：実動画を照合して修正してください",
+      "speechCandidate": "",
+      "instructionDraft": "はしを そろえます",
+      "coachingDraft": "手を動かす前に待ち、必要なところで声をかける",
+      "completionCheckDraft": "原動画の完成見本と照合する",
+      "reviewFlags": [
+        "開発用候補。実際の動作・原音と照合が必要"
+      ]
+    },
+    {
+      "stepId": "s05",
+      "startMs": 43636,
+      "endMs": 54545,
+      "frameMs": 50181,
+      "observationCandidate": "開発用fixture：実動画を照合して修正してください",
+      "speechCandidate": "",
+      "instructionDraft": "もういちど おります",
+      "coachingDraft": "手を動かす前に待ち、必要なところで声をかける",
+      "completionCheckDraft": "原動画の完成見本と照合する",
+      "reviewFlags": [
+        "開発用候補。実際の動作・原音と照合が必要"
+      ]
+    },
+    {
+      "stepId": "s06",
+      "startMs": 54545,
+      "endMs": 65454,
+      "frameMs": 61090,
+      "observationCandidate": "開発用fixture：実動画を照合して修正してください",
+      "speechCandidate": "",
+      "instructionDraft": "かみの まんなかに おきます",
+      "coachingDraft": "手を動かす前に待ち、必要なところで声をかける",
+      "completionCheckDraft": "原動画の完成見本と照合する",
+      "reviewFlags": [
+        "開発用候補。実際の動作・原音と照合が必要"
+      ]
+    },
+    {
+      "stepId": "s07",
+      "startMs": 65454,
+      "endMs": 76363,
+      "frameMs": 72000,
+      "observationCandidate": "開発用fixture：実動画を照合して修正してください",
+      "speechCandidate": "",
+      "instructionDraft": "かみを おさえて まきます",
+      "coachingDraft": "手を動かす前に待ち、必要なところで声をかける",
+      "completionCheckDraft": "原動画の完成見本と照合する",
+      "reviewFlags": [
+        "開発用候補。実際の動作・原音と照合が必要"
+      ]
+    },
+    {
+      "stepId": "s08",
+      "startMs": 76363,
+      "endMs": 87272,
+      "frameMs": 82909,
+      "observationCandidate": "開発用fixture：実動画を照合して修正してください",
+      "speechCandidate": "",
+      "instructionDraft": "ふくろを ひらいて いれます",
+      "coachingDraft": "手を動かす前に待ち、必要なところで声をかける",
+      "completionCheckDraft": "原動画の完成見本と照合する",
+      "reviewFlags": [
+        "開発用候補。実際の動作・原音と照合が必要"
+      ]
+    },
+    {
+      "stepId": "s09",
+      "startMs": 87272,
+      "endMs": 98181,
+      "frameMs": 93818,
+      "observationCandidate": "開発用fixture：実動画を照合して修正してください",
+      "speechCandidate": "",
+      "instructionDraft": "かみと ふくろを ととのえます",
+      "coachingDraft": "手を動かす前に待ち、必要なところで声をかける",
+      "completionCheckDraft": "原動画の完成見本と照合する",
+      "reviewFlags": [
+        "開発用候補。実際の動作・原音と照合が必要"
+      ]
+    },
+    {
+      "stepId": "s10",
+      "startMs": 98181,
+      "endMs": 109090,
+      "frameMs": 104727,
+      "observationCandidate": "開発用fixture：実動画を照合して修正してください",
+      "speechCandidate": "",
+      "instructionDraft": "ふくろを おって テープを はります",
+      "coachingDraft": "手を動かす前に待ち、必要なところで声をかける",
+      "completionCheckDraft": "原動画の完成見本と照合する",
+      "reviewFlags": [
+        "開発用候補。実際の動作・原音と照合が必要"
+      ]
+    },
+    {
+      "stepId": "s11",
+      "startMs": 109090,
+      "endMs": 120000,
+      "frameMs": 115636,
+      "observationCandidate": "開発用fixture：実動画を照合して修正してください",
+      "speechCandidate": "",
+      "instructionDraft": "みほんと くらべます",
+      "coachingDraft": "手を動かす前に待ち、必要なところで声をかける",
+      "completionCheckDraft": "原動画の完成見本と照合する",
+      "reviewFlags": [
+        "開発用候補。実際の動作・原音と照合が必要"
+      ]
+    }
+  ],
+  "reviewFlags": [
+    "Fake実装。実モデルによる解析結果ではありません"
+  ]
+}
