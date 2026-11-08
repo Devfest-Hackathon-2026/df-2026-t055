@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { EditedStep, ReviewChecks, LearnerSessionDTO } from '../../../packages/shared/src/index.ts';
 import { hold, readSafety, flushSafety, safetyKey, clearWaiting } from './safety.ts';
@@ -243,6 +243,8 @@ function Learner({ uid, path, action }: {
 }) {
     const sessionId = path.match(/\/me\/sessions\/([^/]+)/)?.[1];
     const [assignments, setAssignments] = useState<any[]>([]), [session, setSession] = useState<LearnerSessionDTO>(), [safetyTick, setSafetyTick] = useState(0), [message, setMessage] = useState(''), [busy, setBusy] = useState(false), [homeHalted, setHomeHalted] = useState(false);
+    // 開始リクエスト中に押された「やめる／手伝って」を、応答後の遷移判定で使うために保持する
+    const pendingHomeSafety = useRef<'help' | 'stop' | null>(null);
     const key = sessionId ? safetyKey(uid, sessionId) : '';
     const safety = readSafety(localStorage, key);
     useEffect(() => {
@@ -294,6 +296,7 @@ function Learner({ uid, path, action }: {
     }, [uid, key, safetyTick]);
     const requestSafety = (type: 'help' | 'stop') => {
         if (!sessionId) {
+            pendingHomeSafety.current = type;
             setHomeHalted(true);
             setMessage(type === 'stop' ? '作業をやめました' : '近くの職員をよんでください');
             return;
@@ -321,6 +324,14 @@ function Learner({ uid, path, action }: {
                     setBusy(true);
                     try {
                         const s = await api('/me/sessions', 'POST', { taskId: a.taskId, clientRequestId: crypto.randomUUID() });
+                        if (pendingHomeSafety.current) {
+                            // 開始を待つ間に「やめる／手伝って」が押されていたら手順へ進まず、意図を先に送る（停止優先）
+                            try {
+                                await api(`/me/sessions/${s.sessionId}/events`, 'POST', { clientEventId: crypto.randomUUID(), expectedRevision: s.revision, type: pendingHomeSafety.current });
+                            }
+                            catch { /* 送信に失敗しても画面は止めたままにする */ }
+                            return;
+                        }
                         go(`/me/sessions/${s.sessionId}`);
                     }
                     finally {
