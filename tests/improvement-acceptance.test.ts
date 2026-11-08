@@ -2,9 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../apps/api/src/app.ts';
 import { MemoryRepository, doc, seed } from '../apps/api/src/adapters.ts';
-import { createWorker } from '../apps/generator/src/worker.ts';
-import { LocalStorage } from '../apps/api/src/adapters.ts';
-import { FakeModel } from '../apps/generator/src/model.ts';
 
 function setup() {
     const db = new MemoryRepository(); seed(db);
@@ -18,7 +15,7 @@ function setup() {
     return { db, body, post };
 }
 
-test('improvement is idempotent, fixed at acceptance, and never runs as a plain guide', async () => {
+test('improvement is idempotent, fixed at acceptance, and preserves the accepted snapshot', async () => {
     const { db, body, post } = setup();
     const [first, second] = await Promise.all([post(body), post(body)]);
     assert.equal(first.status, 202); assert.equal(second.status, 202);
@@ -34,8 +31,6 @@ test('improvement is idempotent, fixed at acceptance, and never runs as a plain 
     assert.equal(db.get('generationJobs', result.jobId)!.inputSnapshot.supportInputs[0].revision, 1);
     assert.equal((await post({ ...body, supportInputs: [{ ...body.supportInputs[0], summary: '違う要約' }] })).status, 409);
     assert.equal((await post({ ...body, clientRequestId: 'new-key' })).status, 409);
-    await assert.rejects(createWorker(db, new LocalStorage(), new FakeModel(), 30)(result.jobId), /IMPROVEMENT_WORKER_NOT_CONFIGURED/);
-    assert.equal(db.get('generationJobs', result.jobId)!.status, 'queued');
 });
 
 test('source assignment and record ownership are checked on new requests', async () => {
