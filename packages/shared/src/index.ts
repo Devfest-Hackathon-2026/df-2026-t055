@@ -84,3 +84,5 @@ export type ApprovalResponse = {
     releaseId: string;
     version: number;
 };
+
+export * from './learner-profile.ts';
