@@ -20,7 +20,7 @@ const hooks = await import(hookUrl);
 let source = await readFile(new URL('../apps/web/src/main.tsx', import.meta.url), 'utf8');
 source = source.slice(source.indexOf('function Learner(')).replace(/\ncreateRoot.*$/s, '');
 source = `import React, {useState,useEffect,useRef} from ${JSON.stringify(hookUrl)};
-import {hold, readSafety, flushSafety, safetyKey, clearWaiting} from ${JSON.stringify(new URL('../apps/web/src/safety.ts', import.meta.url).href)};
+import {hold, readSafety, flushSafety, safetyKey, clearWaiting, readStart, saveStart, startKey} from ${JSON.stringify(new URL('../apps/web/src/safety.ts', import.meta.url).href)};
 import {learnerSupportNotificationSchema} from ${JSON.stringify(new URL('../packages/shared/src/support.ts', import.meta.url).href)};
 import {learnerStepPresentation} from ${JSON.stringify(new URL('../apps/web/src/learner-display.ts', import.meta.url).href)};
 import {learnerControlPath} from ${JSON.stringify(new URL('../apps/web/src/learner-controls.ts', import.meta.url).href)};
@@ -141,4 +141,27 @@ test('開始要求中の停止はセッション取得後に保存され、送�
     assert.equal(safety.pending.length, 1);
     assert.equal(safety.pending[0].type, 'stop');
     assert.match(text(tree), /作業をやめました/);
+});
+
+test('開始応答前に再読込しても同じ開始IDと停止IDで復旧し停止を送る', async () => {
+    const h = harness();
+    h.store.set('pending-start:learner-a', JSON.stringify({ taskId: 't', clientRequestId: 'start-original', safety: { type: 'stop', clientEventId: 'stop-original' } }));
+    const calls: any[] = [];
+    (globalThis as any).learnerApi = async (path: string, method = 'GET', body?: any) => {
+        if (path === '/me/assignments') return { assignments: [{ taskId: 't', title: '作業' }] };
+        calls.push({ path, method, body });
+        if (path === '/me/sessions') return { sessionId: 's1', revision: 5 };
+        throw Error('offline');
+    };
+    const render = () => { hooks.begin(); return Learner({ uid: 'learner-a', path: '/me', action: async (fn: any) => fn() }); };
+    let tree = render();
+    assert.match(text(tree), /作業をやめました/);
+    assert.doesNotMatch(text(tree), /はじめる/);
+    await hooks.flush(); await settle();
+    tree = render(); await hooks.flush(); await settle();
+    assert.deepEqual(calls[0].body, { taskId: 't', clientRequestId: 'start-original' });
+    const stop = readSafety((globalThis as any).localStorage, h.key);
+    assert.equal(stop.stopped, true);
+    assert.equal(stop.pending[0].clientEventId, 'stop-original');
+    assert.match(text(render()), /作業をやめました/);
 });

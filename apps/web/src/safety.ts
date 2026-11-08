@@ -16,6 +16,15 @@ export type SafetyState = {
 export function safetyKey(uid: string, sessionId: string) {
     return `safety:${uid}:${sessionId}`;
 }
+export type PendingStart = { taskId: string; clientRequestId: string; safety?: { type: 'stop' | 'help'; clientEventId: string } };
+export function startKey(uid: string) { return `pending-start:${uid}`; }
+export function readStart(store: Store, uid: string): PendingStart | null {
+    const value = store.getItem(startKey(uid));
+    return value ? JSON.parse(value) : null;
+}
+export function saveStart(store: Store, uid: string, start: PendingStart) {
+    store.setItem(startKey(uid), JSON.stringify(start));
+}
 export function readSafety(store: Store, key: string): SafetyState {
     const value = store.getItem(key);
     return value ? JSON.parse(value) : { stopped: false, waiting: false, pending: [] };
