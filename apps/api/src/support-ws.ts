@@ -9,6 +9,7 @@ import { supportWsAuthSchema, supportRequestSchema, staffSupportNotificationSche
 export function supportRequestDto(q: Doc) {
     return supportRequestSchema.parse({
         schemaVersion: '1', requestId: q.id, sessionId: q.sessionId, eventId: q.eventId,
+        learnerId: q.learnerId, stepId: q.stepId,
         kind: q.kind, status: q.status, revision: q.revision, createdAt: q.createdAt,
         ...(q.kind === 'help' && q.status !== 'open' ? { assignedTo: q.assignedTo, assignedAt: q.assignedAt } : {}),
         ...(q.kind === 'help' && ['in_progress', 'acknowledged'].includes(q.status) ? { startedBy: q.startedBy, startedAt: q.startedAt } : {}),

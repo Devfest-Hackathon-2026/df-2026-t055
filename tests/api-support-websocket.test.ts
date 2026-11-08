@@ -9,7 +9,7 @@ import { learnerSupportNotificationSchema, staffSupportNotificationSchema } from
 async function harness(t: any, verify?: DemoAuth['verify']) {
     const db = new MemoryRepository(); seed(db);
     db.put('sessions', doc('demo', { id: 's', learnerId: 'a', releaseId: 'r', status: 'waiting_help', stepIndex: 2, revision: 1, activeSupportRequestId: 'q', staffMemo: 'PRIVATE' }));
-    db.put('supportRequests', doc('demo', { id: 'q', sessionId: 's', eventId: 'e', kind: 'help', status: 'open', revision: 1, staffMemo: 'PRIVATE', profile: 'PRIVATE' }));
+    db.put('supportRequests', doc('demo', { id: 'q', sessionId: 's', eventId: 'e', learnerId: 'a', stepId: 'c', kind: 'help', status: 'open', revision: 1, staffMemo: 'PRIVATE', profile: 'PRIVATE' }));
     const { app } = createApp({ db, ...(verify ? { auth: { verify } } : {}) });
     const server = app.listen(0, '127.0.0.1'); await once(server, 'listening');
     const sockets: ReturnType<typeof connect>[] = [];
