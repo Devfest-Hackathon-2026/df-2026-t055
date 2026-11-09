@@ -18,7 +18,7 @@ import type { GenerationQueue } from './cloud-tasks.ts';
 import { generationEnabled } from './generation-control.ts';
 import { frozenCorrections } from './correction-input.ts';
 import { nextCorrectionSequence } from './correction-order.ts';
-import { guideGenerationRequestSchema, improvementGuideInputSnapshotSchema, initialGuideInputSnapshotSchema, correctionContextInputSnapshotSchema } from '../../../packages/shared/src/generation.ts';
+import { guideGenerationRequestSchema, improvementGuideInputSnapshotSchema, initialGuideInputSnapshotSchema, correctionContextInputSnapshotSchema, improvementRetryInputSchema } from '../../../packages/shared/src/generation.ts';
 export class HttpError extends Error {
     constructor(public status: number, public code: string) {
         super(code);
@@ -363,7 +363,17 @@ export function createApp(options: {
     api.get('/jobs/:id', async (req, res) => {
         staff(res);
         const j = await get('generationJobs', req.params.id, res);
-        send(res, { status: j.status, draftId: j.draftId, errorCode: j.errorCode });
+        let retryInput: unknown;
+        if (j.kind === 'guide' && j.status === 'failed' && j.inputSnapshot?.sourceReleaseId) {
+            const snapshot = improvementGuideInputSnapshotSchema.parse(j.inputSnapshot);
+            const draft = await get('drafts', j.draftId, res);
+            if (draft.jobId !== j.id || draft.taskId !== j.taskId || draft.learnerId !== snapshot.learnerId ||
+                snapshot.taskId !== j.taskId || draft.sourceReleaseId !== snapshot.sourceReleaseId)
+                fail(409, 'INVALID_IMPROVEMENT_JOB');
+            retryInput = improvementRetryInputSchema.parse({ learnerId: snapshot.learnerId,
+                sourceReleaseId: snapshot.sourceReleaseId, supportInputs: snapshot.supportInputs });
+        }
+        send(res, { status: j.status, draftId: j.draftId, errorCode: j.errorCode, ...(retryInput ? { retryInput } : {}) });
     });
     api.get('/drafts/:id', async (req, res) => {
         staff(res);
