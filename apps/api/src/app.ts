@@ -1,3 +1,4 @@
+import { supportWebSocket } from './support-ws.ts';
 import http, { type Request, type Response, type NextFunction } from './http.ts';
 import { uploadVideo } from './upload.ts';
 import { createHash } from 'node:crypto';
@@ -46,6 +47,8 @@ export function createApp(options: {
     const tts = options.tts ?? configuredTts();
     const auth = options.auth ?? new DemoAuth(db);
     const app = http();
+    const notifications = supportWebSocket(db, auth);
+    app.upgrade = notifications.upgrade;
     const limit = options.globalLimit ?? Number(process.env.GENERATION_GLOBAL_LIMIT ?? 30);
     if (!Number.isInteger(limit) || limit < 0)
         throw Error('INVALID_GENERATION_GLOBAL_LIMIT');
@@ -549,6 +552,7 @@ export function createApp(options: {
             await db.put('sessions', s);
             return s;
         });
+        notifications.publish(member(res).orgId, req.params.id);
         send(res, { status: result.status, stepIndex: result.stepIndex, revision: result.revision });
     });
     api.get('/support-requests', async (req, res) => {
@@ -585,6 +589,7 @@ export function createApp(options: {
             await db.put('supportRequests', { ...q, ...update });
             return response;
         });
+        notifications.publishRequest(member(res).orgId, req.params.id);
         res.json(result);
     });
     api.post('/support-requests/:id/start', async (req, res) => {
@@ -606,6 +611,7 @@ export function createApp(options: {
             await db.put('supportRequests', { ...q, status: response.status, startedAt: response.startedAt, startedBy: member(res).uid, revision: q.revision + 1 });
             return response;
         });
+        notifications.publishRequest(member(res).orgId, req.params.id);
         res.json(result);
     });
     api.post('/support-requests/:id/acknowledge', async (req, res) => {
@@ -625,6 +631,7 @@ export function createApp(options: {
             await db.put('supportRequests', { ...q, status: response.status, acknowledgedAt: response.acknowledgedAt, acknowledgedBy: member(res).uid, revision: q.revision + 1 });
             return response;
         });
+        notifications.publishRequest(member(res).orgId, req.params.id);
         res.json(result);
     });
     api.post('/support-requests/:id/resume', async (req, res) => {
@@ -670,6 +677,7 @@ export function createApp(options: {
             await db.put('sessions', s);
             return response;
         });
+        notifications.publishRequest(member(res).orgId, req.params.id);
         res.json(result);
     });
     const recordDto = (record: Doc) => {
