@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { AI_CANDIDATE_SCHEMA, configuredModel, FakeModel, VertexVideoModel, type ModelInput } from '../apps/generator/src/model.ts';
+import { AI_CANDIDATE_SCHEMA, configuredModel, FakeModel, toVertexResponseSchema, vertexGenerateContentRequest, VertexVideoModel, type ModelInput } from '../apps/generator/src/model.ts';
 
 const input: ModelInput = {
     videoUri: 'source/example/task/video.mp4', title: 'タオル包装', completionCriteria: '袋口が閉じている',
@@ -25,6 +25,44 @@ test('Vertex request copies only allowed input fields, including nested preferen
     });
     await model.generate(contaminated);
     assert.equal(called, true);
+});
+
+test('Vertex responseSchema keeps only the OpenAPI subset and turns const into enum', () => {
+    const schema = toVertexResponseSchema(AI_CANDIDATE_SCHEMA) as any;
+    assert.equal(schema.$schema, undefined);
+    assert.equal(schema.additionalProperties, undefined);
+    assert.deepEqual(schema.properties.schemaVersion, { type: 'string', enum: ['1'] });
+    assert.equal(schema.properties.steps.minItems, undefined);
+    assert.equal(schema.properties.steps.maxItems, undefined);
+    const step = schema.properties.steps.items;
+    assert.equal(step.properties.stepId.minLength, undefined);
+    assert.equal(step.properties.instructionDraft.maxLength, undefined);
+    assert.equal(step.properties.startMs.minimum, undefined);
+    assert.equal(step.properties.startMs.maximum, undefined);
+    assert.deepEqual(step.required, ['stepId', 'startMs', 'endMs', 'frameMs', 'observationCandidate', 'speechCandidate', 'instructionDraft', 'coachingDraft', 'completionCheckDraft', 'reviewFlags']);
+    assert.deepEqual(schema.required, ['schemaVersion', 'steps', 'reviewFlags']);
+    const serialized = JSON.stringify(schema);
+    for (const keyword of ['$schema', 'additionalProperties', 'minLength', 'maxLength', 'minItems', 'maxItems', 'minimum', 'maximum', 'const'])
+        assert.equal(serialized.includes(`"${keyword}"`), false, keyword);
+});
+
+test('Vertex generateContent request uses responseSchema and never responseJsonSchema', () => {
+    const request = vertexGenerateContentRequest({
+        videoUri: 'gs://example-private-bucket/source/example/task/video.mp4', mimeType: 'video/mp4',
+        title: input.title, completionCriteria: input.completionCriteria, preferences: input.preferences,
+        displayMode: input.displayMode, confirmedGuidance: input.confirmedGuidance,
+        durationMs: input.durationMs, responseSchema: AI_CANDIDATE_SCHEMA
+    });
+    assert.equal('responseJsonSchema' in request.config, false);
+    assert.equal(request.config.responseMimeType, 'application/json');
+    assert.ok(request.config.responseSchema);
+    assert.equal(request.config.abortSignal, undefined);
+    assert.deepEqual(request.contents[0].parts[1], {
+        text: JSON.stringify({
+            title: input.title, completionCriteria: input.completionCriteria, preferences: input.preferences,
+            displayMode: input.displayMode, confirmedGuidance: input.confirmedGuidance, durationMs: input.durationMs
+        })
+    });
 });
 
 test('model provider requires explicit vertex selection', () => {
