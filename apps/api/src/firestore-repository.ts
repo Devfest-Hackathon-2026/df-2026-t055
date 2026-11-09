@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { MemoryRepository, type Doc, type Repository } from './adapters.ts';
+import { Firestore } from '@google-cloud/firestore';
+import { MemoryRepository, type Doc, type Repository, type SupportWatchScope } from './adapters.ts';
 
 // SDK binding is deliberately separate: Native mode, no credentials or SDK required here.
 export interface FirestoreSnapshot {
@@ -22,6 +23,9 @@ export interface FirestoreClient {
     collection(name: string): FirestoreCollection;
     runTransaction<T>(fn: (transaction: FirestoreTransaction) => Promise<T>): Promise<T>;
 }
+type WatchReference = { onSnapshot(next: (snapshot: FirestoreSnapshot) => void, error: (error: Error) => void): () => void };
+type WatchQuery = { where(field: string, op: '==', value: string): WatchQuery; onSnapshot(next: (snapshot: FirestoreQuerySnapshot) => void, error: (error: Error) => void): () => void };
+type WatchClient = { collection(name: string): { doc(id: string): WatchReference; where(field: string, op: '==', value: string): WatchQuery } };
 type Context = { transaction: FirestoreTransaction; writes: Map<string, Map<string, Doc>> };
 // 他組織の文書へのアクセスは403にする。HTTP層は status・code を付けた Error をそのまま返す。
 function forbidden(): Error { return Object.assign(Error('ORG_FORBIDDEN'), { status: 403, code: 'ORG_FORBIDDEN' }); }
@@ -92,12 +96,43 @@ export class FirestoreRepository implements Repository {
             return result;
         });
     }
+    watchSupport(scope: SupportWatchScope, onChange: () => void, onError: () => void): () => void {
+        if (scope.orgId !== this.orgId) throw forbidden();
+        const client = this.client as unknown as WatchClient;
+        const unsubscribers: (() => void)[] = [];
+        let active = true;
+        const stop = () => { if (!active) return; active = false; for (const unsubscribe of unsubscribers) { try { unsubscribe(); } catch { /* Continue releasing the other listeners. */ } } };
+        const failed = () => { if (active) { stop(); onError(); } };
+        const changed = (documents: FirestoreSnapshot[], kind: 'session' | 'request') => {
+            if (!active) return;
+            try {
+                for (const snapshot of documents) {
+                    const data = snapshot.data();
+                    if (!data || data.orgId !== scope.orgId || data.id !== snapshot.id) throw Error('INVALID_WATCH_SCOPE');
+                    if (scope.role === 'learner' && (kind === 'session' ? snapshot.id !== scope.sessionId || data.learnerId !== scope.learnerId : data.sessionId !== scope.sessionId || data.learnerId !== scope.learnerId)) throw Error('INVALID_WATCH_SCOPE');
+                }
+                onChange();
+            } catch { failed(); }
+        };
+        try {
+            let query = client.collection('supportRequests').where('orgId', '==', scope.orgId);
+            if (scope.role === 'learner') query = query.where('sessionId', '==', segment(scope.sessionId));
+            unsubscribers.push(query.onSnapshot(snapshot => queueMicrotask(() => changed(snapshot.docs, 'request')), () => queueMicrotask(failed)));
+            if (scope.role === 'learner') unsubscribers.push(client.collection('sessions').doc(segment(scope.sessionId)).onSnapshot(snapshot => queueMicrotask(() => changed([snapshot], 'session')), () => queueMicrotask(failed)));
+        } catch (error) { stop(); throw error; }
+        return stop;
+    }
 }
 export function configuredRepository(env: NodeJS.ProcessEnv = process.env, client?: FirestoreClient): Repository {
     const backend = env.REPOSITORY_BACKEND ?? 'memory';
     if (backend === 'memory') return new MemoryRepository();
     if (backend !== 'firestore') throw Error('INVALID_REPOSITORY_BACKEND');
-    if (!client) throw Error('FIRESTORE_CLIENT_NOT_CONFIGURED: SDK binding is not installed; inject a FirestoreClient');
+    if (!client && !env.GOOGLE_CLOUD_PROJECT?.trim()) throw Error('FIRESTORE_CLIENT_NOT_CONFIGURED: GOOGLE_CLOUD_PROJECT is required');
     if (!env.FIRESTORE_ORG_ID) throw Error('FIRESTORE_ORG_ID_REQUIRED');
+    if (!client) {
+        const projectId = env.GOOGLE_CLOUD_PROJECT?.trim();
+        if (!projectId) throw Error('FIRESTORE_CLIENT_NOT_CONFIGURED: GOOGLE_CLOUD_PROJECT is required');
+        client = new Firestore({ projectId, ...(env.FIRESTORE_DATABASE_ID ? { databaseId: env.FIRESTORE_DATABASE_ID } : {}) }) as unknown as FirestoreClient;
+    }
     return new FirestoreRepository(client, env.FIRESTORE_ORG_ID);
 }

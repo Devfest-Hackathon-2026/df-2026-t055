@@ -13,11 +13,13 @@ export type Doc = {
     [key: string]: any;
 };
 export type Awaitable<T> = T | Promise<T>;
+export type SupportWatchScope = { orgId: string; role: 'staff' } | { orgId: string; role: 'learner'; sessionId: string; learnerId: string };
 export interface Repository {
     all(collection: string): Awaitable<Doc[]>;
     get(collection: string, id: string): Awaitable<Doc | undefined>;
     put(collection: string, value: Doc): Awaitable<void>;
     transaction<T>(fn: () => T | Promise<T>): Promise<T>;
+    watchSupport?(scope: SupportWatchScope, onChange: () => void, onError: () => void): () => void;
 }
 // Transaction callbacks see private writes; commit publishes them atomically.
 // An async Firestore adapter can use its own transaction context behind this port.

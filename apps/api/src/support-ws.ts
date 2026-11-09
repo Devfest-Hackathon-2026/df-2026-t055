@@ -84,7 +84,7 @@ function connection(socket: Duplex, onMessage: (value: string) => void, onClose:
 }
 
 export function supportWebSocket(db: Repository, auth: Auth) {
-    type Client = { member: Member; sessionId?: string; expiresAt: number; send: (value: unknown) => void; close: () => void };
+    type Client = { member: Member; sessionId?: string; expiresAt: number; send: (value: unknown) => void; close: () => void; unsubscribe?: () => void; refreshing?: Promise<void>; dirty?: boolean };
     const clients = new Set<Client>();
     async function snapshot(client: Client) {
         if (!clients.has(client)) return;
@@ -105,11 +105,18 @@ export function supportWebSocket(db: Repository, auth: Auth) {
         });
         if (clients.has(client) && client.expiresAt > Date.now()) client.send(value);
     }
-    function refresh(client: Client) { void snapshot(client).catch(() => client.close()); }
-    // shortcut: local process delivery only; add Firestore watches for multiple API instances.
+    function refresh(client: Client): Promise<void> {
+        client.dirty = true;
+        if (!client.refreshing) {
+            client.refreshing = (async () => {
+                while (client.dirty && clients.has(client)) { client.dirty = false; await snapshot(client); }
+            })().finally(() => { client.refreshing = undefined; if (client.dirty && clients.has(client)) void refresh(client).catch(() => client.close()); });
+        }
+        return client.refreshing;
+    }
     function publish(orgId: string, sessionId: string) {
         for (const client of clients)
-            if (client.member.orgId === orgId && (client.member.role === 'staff' || client.sessionId === sessionId)) refresh(client);
+            if (client.member.orgId === orgId && (client.member.role === 'staff' || client.sessionId === sessionId)) void refresh(client).catch(() => client.close());
     }
     return {
         publish,
@@ -147,12 +154,19 @@ export function supportWebSocket(db: Repository, auth: Auth) {
                     client = { member: m, sessionId, expiresAt: m.expiresAt, send: wire.send, close: wire.close };
                     clients.add(client);
                     expiry = setTimeout(() => wire.close(), Math.min(m.expiresAt - Date.now(), 2147483647));
-                    await snapshot(client);
+                    await refresh(client);
+                    if (ended || !clients.has(client)) return;
+                    if (db.watchSupport) {
+                        const scope = m.role === 'staff' ? { orgId: m.orgId, role: 'staff' as const } : { orgId: m.orgId, role: 'learner' as const, sessionId: sessionId!, learnerId: m.learnerId! };
+                        const subscribed = client;
+                        const unsubscribe = db.watchSupport(scope, () => { void refresh(subscribed).catch(() => subscribed.close()); }, () => subscribed.close());
+                        if (ended || !clients.has(subscribed)) unsubscribe(); else subscribed.unsubscribe = unsubscribe;
+                    }
                     clearTimeout(timeout);
                 })().catch(() => wire.close());
             }, () => {
                 ended = true; clearTimeout(timeout); clearTimeout(expiry);
-                if (client) clients.delete(client);
+                if (client) { clients.delete(client); client.unsubscribe?.(); client.unsubscribe = undefined; }
             });
             if (head.length) wire.receive(head);
         }
