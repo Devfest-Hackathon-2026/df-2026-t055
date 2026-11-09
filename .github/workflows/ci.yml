@@ -24,12 +24,7 @@ jobs:
         run: |
           npm ci
       - name: Format check
-        run: |
-          if ! npm run format:check; then
-            npm run format -- tests/production-api-startup.test.ts
-            git diff -- tests/production-api-startup.test.ts
-            exit 1
-          fi
+        run: npm run format:check
       - name: Lint
         run: npm run lint
       - name: Typecheck

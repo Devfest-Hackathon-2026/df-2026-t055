@@ -62,13 +62,11 @@ test(
       ].map((key) => ({ [key]: '' })),
       { WEB_ORIGIN: 'http://example.test' },
       { WEB_ORIGIN: 'https://example.test/path' },
-      ...[
-        'FIRESTORE_EMULATOR_HOST',
-        'FIREBASE_AUTH_EMULATOR_HOST',
-        'STORAGE_EMULATOR_HOST',
-      ].map((key) => ({
-        [key]: 'localhost:9000',
-      })),
+      ...['FIRESTORE_EMULATOR_HOST', 'FIREBASE_AUTH_EMULATOR_HOST', 'STORAGE_EMULATOR_HOST'].map(
+        (key) => ({
+          [key]: 'localhost:9000',
+        }),
+      ),
     ];
     for (const changes of invalid) {
       const { child, output } = start(changes);
