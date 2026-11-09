@@ -292,6 +292,7 @@ export function createApp(options: {
                 }
                 inputSnapshot = improvementGuideInputSnapshotSchema.parse({ taskId: t.id, learnerId, sourceReleaseId: source.id,
                     sourceReleaseVersion: source.version, supportInputs: improvement.supportInputs, correctionRefs: correctionInputs.map(c => ({ correctionId: c.correctionId, draftRevision: c.draftRevision })), correctionInputs,
+                    preferences: { sentenceLength: learner.preferences.sentenceLength ?? 40, splitHints: learner.preferences.splitHints ?? '', audioGuidance: false },
                     displayMode: learner.preferences.displayMode ?? 'photo_text', confirmedGuidance: learner.confirmedGuidance ?? [] });
             } else if (correctionInputs.length) {
                 const video = await get('assets', t.videoAssetId, res);

@@ -64,6 +64,7 @@ export function createWorker(db: Repository, storage: Storage, model: VideoModel
             if (frozen && (frozen.taskId !== d.taskId || frozen.learnerId !== d.learnerId || frozen.videoAssetId !== v.id)) throw Error('INVALID_GUIDE_SNAPSHOT');
             let correctionInputs = frozen?.correctionInputs;
             if (frozen) { displayMode = frozen.displayMode; confirmedGuidance = frozen.confirmedGuidance; }
+            let preferences = { sentenceLength: l.preferences.sentenceLength, splitHints: l.preferences.splitHints ?? '', audioGuidance: false };
             if (job.inputSnapshot?.sourceReleaseId) {
                 const snapshot = improvementGuideInputSnapshotSchema.parse(job.inputSnapshot);
                 const source = await db.get('releases', snapshot.sourceReleaseId);
@@ -72,13 +73,14 @@ export function createWorker(db: Repository, storage: Storage, model: VideoModel
                 improvement = { sourceSteps: source.learnerSteps.map((s: any) => ({ order: s.order, text: s.text, imageAltText: s.imageAltText, visibleCaution: s.visibleCaution })), supportSummaries: snapshot.supportInputs.map(input => input.summary) };
                 displayMode = snapshot.displayMode;
                 confirmedGuidance = snapshot.confirmedGuidance;
+                preferences = snapshot.preferences;
             }
             const controller = new AbortController();
             let timeout: ReturnType<typeof setTimeout> | undefined;
             errorCode = 'MODEL_CALL_FAILED';
             const output = await Promise.race([model.generate({
                     // 未確認の希望は省略できる（正本第2節）ため、生成への入力は空の分割ヒントで補う。
-                    videoUri: v.objectPath, title: frozen?.title ?? t.title, completionCriteria: frozen?.completionCriteria ?? '帯紙の向き、袋口、テープを見本と比較する', preferences: frozen?.preferences ?? (improvement ? { sentenceLength: 40, splitHints: '', audioGuidance: false } : { sentenceLength: l.preferences.sentenceLength, splitHints: l.preferences.splitHints ?? '', audioGuidance: false }), displayMode, confirmedGuidance, durationMs: v.durationMs, ...(improvement ? { improvement } : {}),
+                    videoUri: v.objectPath, title: frozen?.title ?? t.title, completionCriteria: frozen?.completionCriteria ?? '帯紙の向き、袋口、テープを見本と比較する', preferences: frozen?.preferences ?? preferences, displayMode, confirmedGuidance, durationMs: v.durationMs, ...(improvement ? { improvement } : {}),
                     ...(correctionInputs?.length ? { corrections: correctionInputs.map(c => ({ changes: c.changes.map(v => ({ field: v.field, before: v.before, after: v.after })), ...(c.contextSummary ? { referenceNote: c.contextSummary } : {}) })) } : {})
                 }, controller.signal), new Promise<never>((_, reject) => {
                     timeout = setTimeout(() => {

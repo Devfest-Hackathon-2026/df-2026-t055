@@ -45,7 +45,7 @@ export const improvementGuideInputSnapshotSchema = z.object({
     taskId: id, learnerId: id, sourceReleaseId: id, sourceReleaseVersion: z.number().int().min(1),
     supportInputs, correctionRefs: z.array(correctionRefSchema).max(20).refine(
         refs => new Set(refs.map(ref => ref.correctionId)).size === refs.length, 'Duplicate correctionId'
-    ), displayMode, confirmedGuidance, correctionInputs: z.array(frozenCorrectionSchema).max(20).optional()
+    ), preferences: generationPreferencesSchema, displayMode, confirmedGuidance, correctionInputs: z.array(frozenCorrectionSchema).max(20).optional()
 }).strict();
 const fields = ['text', 'visibleCaution', 'imageAltText', 'imageAssetId', 'sourceStartMs', 'sourceEndMs', 'frameMs', 'verifiedObservation', 'verifiedSpeech', 'coaching', 'completionCheck', 'position'] as const;
 // null represents an absent step or optional field; positions are zero-based.

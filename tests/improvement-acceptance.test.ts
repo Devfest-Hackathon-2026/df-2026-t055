@@ -19,6 +19,8 @@ function setup() {
 test('improvement is idempotent, fixed at acceptance, and preserves the accepted snapshot', async () => {
     const { db, body, post, getDraft } = setup();
     db.put('draftCorrections', doc('demo', { id: 'history', taskId: 'task', learnerId: 'a', draftRevision: 4, changes: [{ stepId: 'step', field: 'text', before: '前', after: '修正' }] }));
+    const learner = db.get('learners', 'a')!;
+    db.put('learners', { ...learner, preferences: { ...learner.preferences, sentenceLength: 17, splitHints: '赤い線で区切る' } });
     const [first, second] = await Promise.all([post(body), post(body)]);
     assert.equal(first.status, 202); assert.equal(second.status, 202);
     const result = await first.json() as { jobId: string; draftId: string };
@@ -34,11 +36,14 @@ test('improvement is idempotent, fixed at acceptance, and preserves the accepted
     assert.equal(job.inputSnapshot.correctionInputs[0].changes[0].after, '修正');
     db.put('draftCorrections', { ...db.get('draftCorrections', 'history')!, contextSummary: { editSummary: '後からの要約', nextDraftHint: '後から', reviewFlags: [] } });
     assert.equal(db.get('generationJobs', result.jobId)!.inputSnapshot.correctionInputs[0].contextSummary, undefined);
+    assert.deepEqual(job.inputSnapshot.preferences, { sentenceLength: 17, splitHints: '赤い線で区切る', audioGuidance: false });
+    db.put('learners', { ...learner, preferences: { ...learner.preferences, sentenceLength: 30, splitHints: '変更後' } });
     assert.equal(JSON.stringify(job.inputSnapshot).includes('private raw note'), false);
     const record = db.get('supportRecords', 'record')!;
     db.put('supportRecords', { ...record, revision: 2, observedDifficulty: 'changed' });
     assert.equal((await post(body)).status, 202);
     assert.equal(db.get('generationJobs', result.jobId)!.inputSnapshot.supportInputs[0].revision, 1);
+    assert.deepEqual(db.get('generationJobs', result.jobId)!.inputSnapshot.preferences, { sentenceLength: 17, splitHints: '赤い線で区切る', audioGuidance: false });
     assert.equal((await post({ ...body, supportInputs: [{ ...body.supportInputs[0], summary: '違う要約' }] })).status, 409);
     assert.equal((await post({ ...body, clientRequestId: 'new-key' })).status, 409);
 });
@@ -90,4 +95,30 @@ test('retry input is never returned for a mismatched job and draft', async () =>
     const response = await createApp({ db }).app.fetch(new Request(`http://localhost/api/v1/jobs/${result.jobId}`, { headers: { authorization: 'Bearer staff' } }));
     assert.equal(response.status, 409);
     assert.equal(JSON.stringify(await response.json()).includes('確認済み要約'), false);
+});
+
+test('improvement uses preferences captured at acceptance after the profile changes', async () => {
+    const { db, body, post } = setup();
+    const learner = db.get('learners', 'a')!;
+    db.put('learners', { ...learner, preferences: { ...learner.preferences, sentenceLength: 18, splitHints: '赤い線で分ける' } });
+    db.put('tasks', { ...db.get('tasks', 'task')!, title: '作業', videoAssetId: 'video' });
+    db.put('assets', doc('demo', { id: 'video', objectPath: 'source/demo/task/video.mp4', durationMs: 1000 }));
+    db.put('releases', { ...db.get('releases', 'release')!, learnerSteps: [{ order: 1, text: '折る', imageAltText: '写真', visibleCaution: '' }] });
+    const result = await (await post(body)).json() as { jobId: string };
+    db.put('learners', { ...learner, preferences: { ...learner.preferences, sentenceLength: 35, splitHints: '変更後' } });
+    const { createWorker } = await import('../apps/generator/src/worker.ts');
+    const { LocalStorage } = await import('../apps/api/src/adapters.ts');
+    let captured: unknown;
+    await createWorker(db, new LocalStorage(), { async generate(input) { captured = input.preferences; return {}; } }, 30)(result.jobId);
+    assert.deepEqual(captured, { sentenceLength: 18, splitHints: '赤い線で分ける', audioGuidance: false });
+});
+
+test('improvement uses safe defaults for unset preferences', async () => {
+    const { db, body, post } = setup();
+    const learner = db.get('learners', 'a')!;
+    db.put('learners', { ...learner, preferences: {} });
+    const response = await post(body);
+    assert.equal(response.status, 202);
+    const result = await response.json() as { jobId: string };
+    assert.deepEqual(db.get('generationJobs', result.jobId)!.inputSnapshot.preferences, { sentenceLength: 40, splitHints: '', audioGuidance: false });
 });
