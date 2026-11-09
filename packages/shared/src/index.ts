@@ -90,8 +90,6 @@ export type ApprovalResponse = {
     version: number;
 };
 
-export * from './learner-profile.ts';
-
 // Work-guide wire contracts. Existing application DTOs above remain source-compatible.
 const versionSchema = z.literal(schemaVersion);
 const identifier = z.string().min(1);
@@ -206,4 +204,6 @@ export function projectReleaseToSessionSteps(release: Release) {
             : photoTextSessionStepSchema.parse({ ...photo, text: s.text, visibleCaution: s.visibleCaution });
     });
 }
+
+export * from './learner-profile.ts';
 export * from './support.ts';
