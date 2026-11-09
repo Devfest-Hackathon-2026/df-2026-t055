@@ -1,11 +1,13 @@
+import { ImprovementReview } from './improvement-review.tsx';
 import { learnerControlPath, imageFailureText, type LearnerControlLabel } from './learner-controls.ts';
 import { learnerStepPresentation, type LearnerDisplaySession } from './learner-display.ts';
 import { isManualDraft, releaseCopySource, beginReleaseCopy, type ReleaseCopyState } from './release-copy.ts';
-import { releaseCopyResponseSchema } from '../../../packages/shared/src/index.ts';
+import { releaseCopyResponseSchema, improvementRetryInputSchema } from '../../../packages/shared/src/index.ts';
 import { missingDraftChecks, draftPreviewMode, savedDraftReview } from './draft-review.ts';
 import { StaffLearners } from './staff-learners.tsx';
 import { StaffSupport } from './staff-support.tsx';
 import { createTokenProvider } from './auth.ts';
+import { createFirebaseSession } from './firebase-session.ts';
 import { subscribeSupport } from './support-ws.ts';
 import { learnerSupportNotificationSchema } from '../../../packages/shared/src/support.ts';
 import React, { useEffect, useRef, useState } from 'react';
@@ -14,9 +16,19 @@ import type { EditedStep, ReviewChecks, LearnerSessionDTO } from '../../../packa
 import { hold, readSafety, flushSafety, safetyKey, clearWaiting, readStart, saveStart, startKey } from './safety.ts';
 import './style.css';
 const accounts = [['staff', '職員'], ['learner-a', '本人 Aさん'], ['learner-b', '本人 Bさん'], ['newcomer', '新人']] as const;
-let account = localStorage.getItem('demoAccount') ?? 'staff';
-const getToken = createTokenProvider(() => account);
-const subscribeStaffSupport = (receive: (value: unknown) => void) => subscribeSupport(getToken, undefined, receive);
+const authMode = import.meta.env.VITE_AUTH_BACKEND ?? 'demo';
+let firebaseSession: ReturnType<typeof createFirebaseSession> | undefined;
+let authConfigurationError = '';
+if (authMode === 'firebase') {
+    try { firebaseSession = createFirebaseSession({ apiKey: import.meta.env.VITE_FIREBASE_API_KEY ?? '', authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ?? '', projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID ?? '' }); }
+    catch { authConfigurationError = '認証設定を確認してください。'; }
+} else if (authMode !== 'demo') authConfigurationError = '認証設定を確認してください。';
+let account = authMode === 'demo' ? localStorage.getItem('demoAccount') ?? 'staff' : '';
+const getToken = createTokenProvider(() => account, authMode === 'demo' ? undefined : async () => {
+    if (!firebaseSession) throw Error('AUTH_UNAVAILABLE');
+    return firebaseSession.token();
+});
+const subscribeStaffSupport = (receive: (value: unknown) => void, status: (connected: boolean) => void) => subscribeSupport(getToken, undefined, receive, status);
 async function api(path: string, method = 'GET', body?: unknown) {
     const r = await fetch(`/api/v1${path}`, { method, headers: { Authorization: `Bearer ${await getToken()}`, ...(body instanceof FormData ? {} : { 'Content-Type': 'application/json' }) }, ...(body === undefined ? {} : { body: body instanceof FormData ? body : JSON.stringify(body) }) });
     const data = await r.json();
@@ -64,6 +76,8 @@ function Asset({ id, video = false, audio = false, startMs = 0, endMs, alt = '�
 function App() {
     const [path, setPath] = useState(location.pathname);
     const [uid, setUid] = useState(account);
+    const [role, setRole] = useState<'staff' | 'learner' | 'newcomer' | ''>(authMode === 'demo' ? (account === 'staff' ? 'staff' : account === 'newcomer' ? 'newcomer' : 'learner') : '');
+    const [authLoading, setAuthLoading] = useState(authMode === 'firebase');
     const [error, setError] = useState('');
     useEffect(() => {
         const f = () => {
@@ -72,6 +86,28 @@ function App() {
         };
         window.addEventListener('popstate', f);
         return () => window.removeEventListener('popstate', f);
+    }, []);
+    useEffect(() => {
+        if (authMode !== 'firebase' || !firebaseSession) { setAuthLoading(false); return; }
+        let active = true, sequence = 0;
+        const unsubscribe = firebaseSession.observe(user => {
+            const current = ++sequence;
+            account = ''; setUid(''); setRole(''); setError('');
+            if (!user) { setAuthLoading(false); return; }
+            setAuthLoading(true);
+            void (async () => {
+                try {
+                    const identity = await api('/identity');
+                    if (identity.uid !== user.uid || !['staff', 'learner', 'newcomer'].includes(identity.role)) throw Error('INVALID_IDENTITY');
+                    if (active && current === sequence) {
+                        account = user.uid; setUid(user.uid); setRole(identity.role);
+                        go(identity.role === 'staff' ? '/staff' : identity.role === 'newcomer' ? '/handover' : '/me');
+                    }
+                } catch (failure) { if (active && current === sequence) setError((failure as { code?: string }).code === 'AUTH_SERVICE_UNAVAILABLE' ? '認証サービスを利用できません。時間をおいて再度お試しください。' : 'アカウントの権限を確認できません。管理者に確認してください。'); }
+                finally { if (active && current === sequence) setAuthLoading(false); }
+            })();
+        });
+        return () => { active = false; unsubscribe(); };
     }, []);
     const action = async (fn: () => Promise<void>) => {
         setError('');
@@ -82,15 +118,23 @@ function App() {
             setError((e as Error).message);
         }
     };
+    if (authConfigurationError) return <main><p role="alert">{authConfigurationError}</p></main>;
+    if (authMode === 'firebase' && (!role || authLoading)) return <main>{authLoading ? <p role="status">認証を確認中です</p> : <FirebaseLogin error={error}/>}</main>;
     return <><header><a href="#" onClick={e => {
             e.preventDefault();
-            go(uid === 'staff' ? '/staff' : uid === 'newcomer' ? '/handover' : '/me');
-        }}>てじゅんのバトン</a><span>開発デモ · Fake生成</span><label>デモアカウント <select value={uid} onChange={e => {
-            account = e.target.value;
-            localStorage.setItem('demoAccount', account);
-            setUid(account);
-            go(account === 'staff' ? '/staff' : account === 'newcomer' ? '/handover' : '/me');
-        }}>{accounts.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></header><main key={uid}><p className="notice">架空プロフィールを使ったローカルデモです。生成候補は職員の原動画照合・承認が必要です。</p>{error && <div role="alert" className="error">{error}</div>}{uid === 'staff' ? <Staff path={path} action={action}/> : uid === 'newcomer' ? <Handover path={path} action={action}/> : <Learner uid={uid} path={path} action={action}/>}</main></>;
+            go(role === 'staff' ? '/staff' : role === 'newcomer' ? '/handover' : '/me');
+        }}>てじゅんのバトン</a>{authMode === 'demo' ? <><span>開発デモ · Fake生成</span><label>デモアカウント <select value={uid} onChange={e => {
+            account = e.target.value; localStorage.setItem('demoAccount', account); setUid(account);
+            const nextRole = account === 'staff' ? 'staff' : account === 'newcomer' ? 'newcomer' : 'learner'; setRole(nextRole);
+            go(nextRole === 'staff' ? '/staff' : nextRole === 'newcomer' ? '/handover' : '/me');
+        }}>{accounts.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></> : <button onClick={() => void firebaseSession?.signOut()}>ログアウト</button>}</header><main key={uid}><p className="notice">生成候補は職員の原動画照合・承認が必要です。</p>{error && <div role="alert" className="error">{error}</div>}{role === 'staff' ? <Staff path={path} action={action}/> : role === 'newcomer' ? <Handover path={path} action={action}/> : <Learner uid={uid} path={path} action={action}/>}</main></>;
+}
+function FirebaseLogin({ error }: { error: string }) {
+    const [email, setEmail] = useState(''), [password, setPassword] = useState(''), [failure, setFailure] = useState(''), [busy, setBusy] = useState(false);
+    return <section><h1>ログイン</h1>{(error || failure) && <p role="alert">{error || failure}</p>}<form onSubmit={e => {
+        e.preventDefault(); if (!firebaseSession || busy) return; setBusy(true); setFailure('');
+        void firebaseSession.signIn(email.trim(), password).then(() => setPassword('')).catch(() => { setFailure('ログインできませんでした。入力内容を確認してください。'); setPassword(''); }).finally(() => setBusy(false));
+    }}><label>メールアドレス<input type="email" autoComplete="username" required value={email} onChange={e => setEmail(e.target.value)}/></label><label>パスワード<input type="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)}/></label><button disabled={busy}>ログイン</button></form>{error && <button onClick={() => void firebaseSession?.signOut()}>別のアカウントでログイン</button>}</section>;
 }
 type Action = (fn: () => Promise<void>) => Promise<void>;
 function Staff({ path, action }: {
@@ -140,18 +184,22 @@ function Draft({ id, action }: {
     const [draft, setDraft] = useState<any>(), [task, setTask] = useState<any>(), [steps, setSteps] = useState<EditedStep[]>([]), [checks, setChecks] = useState<ReviewChecks>({ presentationConfirmed: false, flagResolution: '', steps: {} }), [release, setRelease] = useState<any>(), [busy, setBusy] = useState(false), [preview, setPreview] = useState<number | null>(null);
     const [displayMode, setDisplayMode] = useState<'photo_only' | 'photo_text'>('photo_text'), [audioGuidance, setAudioGuidance] = useState(false);
     const [source, setSource] = useState('');
+    const [improvementSource, setImprovementSource] = useState<any>();
+    const [appliedRefs, setAppliedRefs] = useState<Array<{ recordId: string; revision: number }>>([]);
     const [previewMode, setPreviewMode] = useState<'photo_only' | 'photo_text'>('photo_text');
     const [error, setError] = useState(''), [conflict, setConflict] = useState(false), [latest, setLatest] = useState<any>();
     const sending = useRef(false);
+    const retryKey = useRef<string | undefined>(undefined);
     const previewTrigger = useRef<HTMLButtonElement | null>(null);
     const closePreview = () => { setPreview(null); previewTrigger.current?.focus(); };
     const loadSource = async (d: any) => {
-        setSource('');
-        if (isManualDraft(d)) {
+        setSource(''); setImprovementSource(undefined);
+        if (isManualDraft(d) || d.origin === 'improvement' && d.status === 'editing') {
             const approval = (await api(`/handover/releases/${d.sourceReleaseId}`)).release;
             const summary = (await api('/handover/releases')).releases.find((r: any) => r.releaseId === d.sourceReleaseId);
             if (!summary) throw Error('コピー元の承認版が見つかりません。再取得してください。');
             setSource(releaseCopySource(summary, approval));
+            if (d.origin === 'improvement') setImprovementSource(approval);
         }
     };
     const load = async () => {
@@ -161,6 +209,7 @@ function Draft({ id, action }: {
         setAudioGuidance(d.audioGuidance ?? false);
         setSteps(d.editedSteps);
         setChecks(d.reviewChecks);
+        setAppliedRefs(d.appliedSupportRecordRefs ?? []);
         setTask((await api(`/tasks/${d.taskId}`)).task);
         await loadSource(d);
     };
@@ -204,20 +253,42 @@ function Draft({ id, action }: {
         if (d.status !== 'editing') setError('最新の下書きは編集できない状態です。入力は保持しています。');
     };
     const save = async () => {
-        const result = savedDraftReview(await api(`/drafts/${id}`, 'PATCH', { expectedRevision: draft.revision, editedSteps: steps, displayMode, audioGuidance, reviewChecks: checks }));
+        const result = savedDraftReview(await api(`/drafts/${id}`, 'PATCH', { expectedRevision: draft.revision, editedSteps: steps, displayMode, audioGuidance, reviewChecks: checks, ...(draft.origin === 'improvement' ? { appliedSupportRecordRefs: appliedRefs } : {}) }));
         setDraft({ ...draft, ...result });
         setChecks(result.reviewChecks);
         setLatest(undefined);
         return result;
     };
+    const retry = async () => {
+        if (sending.current) return;
+        sending.current = true; setBusy(true); setError('');
+        try {
+            let payload: unknown = { learnerId: draft.learnerId };
+            if (draft.sourceReleaseId) {
+                if (!draft.jobId) throw Error('再試行元のジョブがありません。');
+                const job = await api(`/jobs/${encodeURIComponent(draft.jobId)}`);
+                if (job.status !== 'failed' || job.draftId !== id) throw Error('再試行元のジョブを確認できません。');
+                const input = improvementRetryInputSchema.parse(job.retryInput);
+                if (input.learnerId !== draft.learnerId || input.sourceReleaseId !== draft.sourceReleaseId) throw Error('再試行元の内容が一致しません。');
+                retryKey.current ??= crypto.randomUUID();
+                payload = { ...input, clientRequestId: retryKey.current };
+            }
+            const result = await api(`/tasks/${encodeURIComponent(draft.taskId)}/generations`, 'POST', payload);
+            go(`/staff/tasks/${encodeURIComponent(draft.taskId)}/drafts/${encodeURIComponent(result.draftId)}`);
+        } catch (e) {
+            const failure = e as { status?: number; code?: string };
+            setError(failure.code === 'GENERATION_PAUSED' ? '生成受付は停止中です。再開後に再試行してください。'
+                : failure.code === 'GENERATION_LIMIT' ? '生成の上限に達したため、再試行できません。'
+                : failure.status === 409 && draft.sourceReleaseId
+                    ? '元の版か記録が変わった可能性があります。本人別の作業一覧で記録を確認し、選び直してください。'
+                    : '再試行できませんでした。同じ内容で再度お試しください。');
+        } finally { sending.current = false; setBusy(false); }
+    };
     return <><nav><button onClick={() => go('/staff')}>作業一覧</button><button onClick={() => go(`/staff/drafts/${id}/review`)}>確認・承認へ</button><button onClick={() => {
             localStorage.removeItem(`approval:${id}`);
             if (draft.status === 'editing') void run(fetchLatest);
             else void action(load);
-        }}>{draft.status === 'editing' ? '最新値を取得' : '再取得'}</button></nav><h1>{manual ? '承認版のコピー' : 'AIの下書き（解釈）'}</h1>{manual && <p role="status">{source || 'コピー元の承認版を取得中です。'}</p>}<p>本人：{draft.learnerId === 'a' ? 'Aさん（9工程）' : 'Bさん（折るを細分化・11工程）'} / revision {draft.revision} / {draft.status}</p>{!manual && draft.status === 'generating' ? <p role="status">動画解析中です。3秒ごとに状態を確認しています。</p> : !manual && draft.status === 'failed' ? <section><p role="alert">生成に失敗しました。本人用の手順は作成されていません。</p><button onClick={() => void action(async () => {
-                const r = await api(`/tasks/${draft.taskId}/generations`, 'POST', { learnerId: draft.learnerId });
-                go(`/staff/tasks/${draft.taskId}/drafts/${r.draftId}`);
-            })}>新しいジョブで再試行</button></section> : draft.status === 'approved' ? <section><h2>承認済みです</h2><button onClick={() => go('/staff/handover')}>承認版を確認・本人へ割当</button></section> : <><p>{manual ? '承認版をコピーした手作業の下書きです。原動画と照合し、修正後にすべての確認を行ってから、新しい版として承認してください。元の承認版と実行中の手順は変わりません。' : 'Fake候補です。動画の動作・原音と候補を照合し、必要な修正と写真切り出しを行ってください。確認欄はすべて未確認から始まります。'}</p>{error && <p role="alert">{error}</p>}{latest && <section><h2>サーバーの最新値（入力は保持）</h2><p>revision {latest.revision} / {latest.status}</p><p>表示方法：{latest.displayMode} / 音声：{String(latest.audioGuidance)}</p><pre>{JSON.stringify({ editedSteps: latest.editedSteps, reviewChecks: latest.reviewChecks }, null, 2)}</pre></section>}<fieldset disabled={busy}><legend>この作業の提示設定</legend><label>表示方法<select value={displayMode} onChange={e => { setDisplayMode(e.target.value as typeof displayMode); setChecks(c => ({ ...c, presentationConfirmed: false })); }}><option value="photo_only">写真のみ</option><option value="photo_text">写真＋短文</option></select></label><label><input type="checkbox" checked={audioGuidance} onChange={e => { setAudioGuidance(e.target.checked); setChecks(c => ({ ...c, presentationConfirmed: false })); }}/>音声ガイドを希望する</label></fieldset><fieldset disabled={busy}><legend>工程の編集と確認</legend><div className="workspace"><aside>{task?.videoAssetId && <Asset id={task.videoAssetId} video/>}{!manual && <><h2>AIの候補・確認が必要な点</h2>{draft.aiProposal?.reviewFlags.map((f: string) => <p key={f}>{f}</p>)}{draft.aiProposal?.steps.map((s: any) => <details key={s.stepId}><summary>{s.stepId}：{s.startMs}–{s.endMs} ms</summary><p>観察候補：{s.observationCandidate}</p><p>声の候補：{s.speechCandidate || '聞き取り未確認'}</p>{s.reviewFlags.map((f: string) => <p key={f}>{f}</p>)}</details>)}</>}</aside><div>{steps.map((s, i) => <section key={s.stepId}><h2>工程 {i + 1}</h2>{s.imageAssetId && <Asset id={s.imageAssetId}/>}<label>本人に見せる短文（40文字以内）<input maxLength={40} value={s.text} onChange={e => change(i, 'text', e.target.value)}/></label><label>写真の代替テキスト（200文字以内）<input maxLength={200} value={s.imageAltText ?? ''} onChange={e => change(i, 'imageAltText', e.target.value)}/></label><label>本人に見せる注意<input maxLength={200} value={s.visibleCaution} onChange={e => change(i, 'visibleCaution', e.target.value)}/></label><div className="times">{(['sourceStartMs', 'sourceEndMs', 'frameMs'] as const).map((key, j) => <label key={key}>{['開始ms', '終了ms', '写真ms'][j]}<input type="number" min={0} value={s[key]} onChange={e => change(i, key, Number(e.target.value))}/></label>)}</div><button disabled={busy} onClick={() => void action(async () => {
+        }}>{draft.status === 'editing' ? '最新値を取得' : '再取得'}</button></nav><h1>{manual ? '承認版のコピー' : 'AIの下書き（解釈）'}</h1>{manual && <p role="status">{source || 'コピー元の承認版を取得中です。'}</p>}<p>本人：{draft.learnerId === 'a' ? 'Aさん（9工程）' : draft.learnerId === 'b' ? 'Bさん（折るを細分化・11工程）' : '対象の本人'} / revision {draft.revision} / {draft.status}</p>{!manual && draft.status === 'generating' ? <p role="status">動画解析中です。3秒ごとに状態を確認しています。</p> : !manual && draft.status === 'failed' ? <section><p role="alert">生成に失敗しました。本人用の手順は作成されていません。</p>{error && <p role="alert">{error}</p>}<button disabled={busy} onClick={() => void retry()}>新しいジョブで再試行</button>{draft.sourceReleaseId && <button disabled={busy} onClick={() => go(`/staff/learners/${encodeURIComponent(draft.learnerId)}`)}>本人別の作業一覧で記録を選び直す</button>}</section> : draft.status === 'approved' ? <section><h2>承認済みです</h2><button onClick={() => go('/staff/handover')}>承認版を確認・本人へ割当</button></section> : <><p>{manual ? '承認版をコピーした手作業の下書きです。原動画と照合し、修正後にすべての確認を行ってから、新しい版として承認してください。元の承認版と実行中の手順は変わりません。' : 'Fake候補です。動画の動作・原音と候補を照合し、必要な修正と写真切り出しを行ってください。確認欄はすべて未確認から始まります。'}</p>{error && <p role="alert">{error}</p>}{latest && <section><h2>サーバーの最新値（入力は保持）</h2><p>revision {latest.revision} / {latest.status}</p><p>表示方法：{latest.displayMode} / 音声：{String(latest.audioGuidance)}</p><pre>{JSON.stringify({ editedSteps: latest.editedSteps, reviewChecks: latest.reviewChecks }, null, 2)}</pre></section>}<fieldset disabled={busy}><legend>この作業の提示設定</legend><label>表示方法<select value={displayMode} onChange={e => { setDisplayMode(e.target.value as typeof displayMode); setChecks(c => ({ ...c, presentationConfirmed: false })); }}><option value="photo_only">写真のみ</option><option value="photo_text">写真＋短文</option></select></label><label><input type="checkbox" checked={audioGuidance} onChange={e => { setAudioGuidance(e.target.checked); setChecks(c => ({ ...c, presentationConfirmed: false })); }}/>音声ガイドを希望する</label></fieldset>{draft.origin === 'improvement' && <ImprovementReview source={improvementSource} steps={steps} references={draft.referencedSupportInputs ?? []} selected={appliedRefs} onChange={setAppliedRefs} video={(assetId, start, end) => <Asset id={assetId} video startMs={start} endMs={end}/>} />}<p>本人に見せる短文・写真の代替テキスト・注意の修正は、次回のAI下書きに使われます。これらの欄に本人を特定できる情報を入れないでください。</p><fieldset disabled={busy}><legend>工程の編集と確認</legend><div className="workspace"><aside>{task?.videoAssetId && <Asset id={task.videoAssetId} video/>}{!manual && <><h2>AIの候補・確認が必要な点</h2>{draft.aiProposal?.reviewFlags.map((f: string) => <p key={f}>{f}</p>)}{draft.aiProposal?.steps.map((s: any) => <details key={s.stepId}><summary>{s.stepId}：{s.startMs}–{s.endMs} ms</summary><p>観察候補：{s.observationCandidate}</p><p>声の候補：{s.speechCandidate || '聞き取り未確認'}</p>{s.reviewFlags.map((f: string) => <p key={f}>{f}</p>)}</details>)}</>}</aside><div>{steps.map((s, i) => <section key={s.stepId}><h2>工程 {i + 1}</h2>{s.imageAssetId && <Asset id={s.imageAssetId}/>}<label>本人に見せる短文（40文字以内）<input maxLength={40} value={s.text} onChange={e => change(i, 'text', e.target.value)}/></label><label>写真の代替テキスト（200文字以内）<input maxLength={200} value={s.imageAltText ?? ''} onChange={e => change(i, 'imageAltText', e.target.value)}/></label><label>本人に見せる注意<input maxLength={200} value={s.visibleCaution} onChange={e => change(i, 'visibleCaution', e.target.value)}/></label><div className="times">{(['sourceStartMs', 'sourceEndMs', 'frameMs'] as const).map((key, j) => <label key={key}>{['開始ms', '終了ms', '写真ms'][j]}<input type="number" min={0} value={s[key]} onChange={e => change(i, key, Number(e.target.value))}/></label>)}</div><button disabled={busy} onClick={() => void action(async () => {
                     setBusy(true);
                     try {
                         const r = await api(`/drafts/${id}/frames`, 'POST', { frameMs: s.frameMs });
@@ -235,7 +306,7 @@ function Draft({ id, action }: {
                 }} disabled={steps.length >= 20}>次に工程を追加</button><button disabled={steps.length <= 1} onClick={() => {
                     setSteps(old => old.filter((_, j) => j !== i));
                     setChecks(c => ({ ...c, presentationConfirmed: false }));
-                }}>この工程を削除</button></section>)}</div></div><section><h2>承認までに必要な確認・再確認</h2>{missing.length ? <ul>{missing.map(item => <li key={item}>{item}</li>)}</ul> : <p role="status">確認が揃いました。保存後のサーバー確認を経て承認できます。</p>}<p>内容を変えて保存すると、サーバーが確認を解除します。保存後にプレビューし、確認を付け直してください。</p><label>確認が必要な点への対応記録<textarea maxLength={2000} value={checks.flagResolution} onChange={e => setChecks(c => ({ ...c, flagResolution: e.target.value }))}/></label><label className="check"><input type="checkbox" checked={checks.presentationConfirmed} onChange={e => setChecks(c => ({ ...c, presentationConfirmed: e.target.checked }))}/>本人への提示内容確認済み</label><button disabled={busy || conflict} onClick={() => void run(async () => { await save(); })}>編集と確認を保存</button><button disabled={busy || conflict || missing.length > 0} onClick={() => void run(async () => {
+                }}>この工程を削除</button></section>)}</div></div><section><h2>承認までに必要な確認・再確認</h2>{missing.length ? <ul>{missing.map(item => <li key={item}>{item}</li>)}</ul> : <p role="status">確認が揃いました。保存後のサーバー確認を経て承認できます。</p>}<p>内容を変えて保存すると、サーバーが確認を解除します。保存後にプレビューし、確認を付け直してください。</p><label>確認が必要な点への対応記録<textarea maxLength={2000} value={checks.flagResolution} onChange={e => setChecks(c => ({ ...c, flagResolution: e.target.value }))}/></label><label className="check"><input type="checkbox" checked={checks.presentationConfirmed} onChange={e => setChecks(c => ({ ...c, presentationConfirmed: e.target.checked }))}/>本人への提示内容確認済み</label><button disabled={busy || conflict} onClick={() => void run(async () => { await save(); })}>編集と確認を保存</button><button disabled={busy || conflict || missing.length > 0 || (draft.origin === 'improvement' && !improvementSource)} onClick={() => void run(async () => {
                     const key = `approval:${id}`;
                     const saved = localStorage.getItem(key);
                     let payload = saved ? JSON.parse(saved) : undefined;
@@ -315,6 +386,8 @@ function Learner({ uid, path, action }: {
     const sessionId = path.match(/\/me\/sessions\/([^/]+)/)?.[1];
     const latestSupport = useRef({ sessionId: '', session: -1, requestId: '', support: -1 });
     const [assignments, setAssignments] = useState<any[]>([]), [session, setSession] = useState<LearnerDisplaySession>(), [safetyTick, setSafetyTick] = useState(0), [message, setMessage] = useState(''), [busy, setBusy] = useState(false), [homeHalted, setHomeHalted] = useState(false);
+    const sessionRef = useRef(session);
+    sessionRef.current = session;
     // 開始リクエスト中に押された「やめる／手伝って」を、応答後の遷移判定で使うために保持する
     const pendingHomeSafety = useRef<'help' | 'stop' | null>(null);
     const key = sessionId ? safetyKey(uid, sessionId) : '';
@@ -396,20 +469,22 @@ function Learner({ uid, path, action }: {
         let active = true;
         const apply = (state: { sessionId: string; releaseId: string; status: LearnerSessionDTO['status']; stepIndex: number; revision: number; support?: { requestId: string; revision: number; status: string } }) => {
             if (!active || state.sessionId !== sessionId || readSafety(localStorage, key).stopped) return;
+            const previous = sessionRef.current;
+            if (!previous || previous.releaseId !== state.releaseId || state.revision < previous.revision) return;
             const latest = latestSupport.current;
-            if (latest.sessionId === sessionId && (state.revision < latest.session || (state.support?.requestId === latest.requestId && state.support && state.support.revision < latest.support))) return;
+            if (latest.sessionId === sessionId && (state.revision < latest.session ||
+                (state.revision === latest.session && latest.requestId && state.support?.requestId !== latest.requestId) ||
+                (state.support?.requestId === latest.requestId && state.support && state.support.revision < latest.support))) return;
             latestSupport.current = { sessionId, session: state.revision, requestId: state.support?.requestId ?? (state.revision === latest.session ? latest.requestId : ''), support: state.support?.revision ?? (state.revision === latest.session ? latest.support : -1) };
+            const pending = readSafety(localStorage, key);
+            if (state.status === 'active' && !state.support && !pending.pending.length) clearWaiting(localStorage, key);
+            const updated = { ...previous, status: state.status, stepIndex: state.stepIndex, revision: state.revision };
+            sessionRef.current = updated;
             setSession(previous => {
-                if (!previous || previous.releaseId !== state.releaseId || state.revision < previous.revision) return previous;
-                // Release the local wait when the server shows the session active with no open
-                // support request: the help that caused the wait has been answered and the session
-                // resumed. Anchor on the request state, not on a revision increase seen after
-                // load, so a reload after resume also releases the wait.
-                const pending = readSafety(localStorage, key);
-                if (state.status === 'active' && !state.support && !pending.pending.length) clearWaiting(localStorage, key);
+                if (!previous || previous.releaseId !== state.releaseId || state.revision < previous.revision || readSafety(localStorage, key).stopped) return previous;
                 return { ...previous, status: state.status, stepIndex: state.stepIndex, revision: state.revision };
             });
-            if (state.support) setMessage(state.support.status === 'open' ? '職員をよんでいます' : state.support.status === 'acknowledged' ? '対応が終わりました' : '担当の職員が決まりました');
+            if (state.support && !pending.pending.length) setMessage(state.support.status === 'open' ? '職員をよんでいます' : state.support.status === 'acknowledged' ? '対応が終わりました' : state.support.status === 'in_progress' ? '職員が対応しています' : '担当の職員が決まりました');
         };
         const poll = async () => { try { apply(await api(`/me/sessions/${sessionId}`)); } catch { /* Keep waiting during disconnects. */ } };
         const timer = setInterval(() => void poll(), 3000);

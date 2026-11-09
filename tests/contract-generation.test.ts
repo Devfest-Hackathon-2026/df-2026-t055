@@ -70,6 +70,8 @@ test('support IDs, revisions, summaries and request keys enforce boundaries in r
     for (const clientRequestId of ['', 'x'.repeat(101)]) rejects(g.improvementGenerationRequestSchema, { ...request, clientRequestId });
     g.improvementGenerationRequestSchema.parse({ ...request, clientRequestId: 'x'.repeat(100) });
     const snapshot = fixture('improvement-snapshot-valid');
+    rejects(g.improvementGuideInputSnapshotSchema, { ...snapshot, preferences: undefined });
+    rejects(g.improvementGuideInputSnapshotSchema, { ...snapshot, preferences: { ...snapshot.preferences, sentenceLength: 41 } });
     for (const sourceReleaseVersion of [0, -1, 1.5]) rejects(g.improvementGuideInputSnapshotSchema, { ...snapshot, sourceReleaseVersion });
     const ref = snapshot.correctionRefs[0];
     for (const correctionRefs of [[ref, ref], [{ ...ref, correctionId: '' }], [{ ...ref, draftRevision: -1 }], [{ ...ref, draftRevision: 0.5 }], Array.from({ length: 21 }, (_, i) => ({ ...ref, correctionId: `c${i}` }))])
@@ -88,12 +90,15 @@ test('context output trims and checks exact character and count limits', () => {
 });
 test('draft corrections preserve all allowed fields and reject unsafe values, counts and revisions', () => {
     const base = fixture('draft-correction-valid'), change = base.changes[0];
-    for (const field of ['text', 'visibleCaution', 'imageAltText', 'imageAssetId', 'sourceStartMs', 'sourceEndMs', 'frameMs', 'verifiedObservation', 'verifiedSpeech', 'coaching', 'completionCheck'])
+    for (const field of ['text', 'visibleCaution', 'imageAltText', 'imageAssetId', 'sourceStartMs', 'sourceEndMs', 'frameMs', 'verifiedObservation', 'verifiedSpeech', 'coaching', 'completionCheck', 'position'])
         g.draftCorrectionChangeSchema.parse({ ...change, field, before: 0, after: 'あ'.repeat(2000) });
     for (const field of ['reason', 'profile', 'unknown']) rejects(g.draftCorrectionChangeSchema, { ...change, field });
-    for (const key of ['before', 'after']) for (const value of [true, null, {}, [], Infinity, -Infinity, NaN, 'あ'.repeat(2001)]) rejects(g.draftCorrectionChangeSchema, { ...change, [key]: value });
-    for (const changes of [[], Array(221).fill(change)]) rejects(g.draftCorrectionSchema, { ...base, changes });
-    g.draftCorrectionSchema.parse({ ...base, changes: Array(220).fill(change), draftRevision: 0, reason: 'あ'.repeat(2000) });
+    for (const key of ['before', 'after']) {
+        g.draftCorrectionChangeSchema.parse({ ...change, [key]: null });
+        for (const value of [true, {}, [], Infinity, -Infinity, NaN, 'あ'.repeat(2001)]) rejects(g.draftCorrectionChangeSchema, { ...change, [key]: value });
+    }
+    for (const changes of [[], Array(481).fill(change)]) rejects(g.draftCorrectionSchema, { ...base, changes });
+    g.draftCorrectionSchema.parse({ ...base, changes: Array(480).fill(change), draftRevision: 0, reason: 'あ'.repeat(2000) });
     for (const draftRevision of [-1, 0.5, '0']) rejects(g.draftCorrectionSchema, { ...base, draftRevision });
     rejects(g.draftCorrectionSchema, { ...base, reason: 'あ'.repeat(2001) });
     rejects(g.draftCorrectionSchema, { ...base, createdAt: 'yesterday' });

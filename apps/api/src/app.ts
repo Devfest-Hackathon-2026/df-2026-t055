@@ -3,16 +3,22 @@ import http, { type Request, type Response, type NextFunction } from './http.ts'
 import { uploadVideo } from './upload.ts';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { releaseCopyRequestSchema, releaseCopyResponseSchema, draftDetailSchema, editedStepSchema, eventSchema, generationRequestSchema, approvalRequestSchema, releaseSchema, draftPatchSchema, sessionStartSchema, normalizeRelease, projectReleaseToSessionSteps, learnerSessionSchema, type Member } from '../../../packages/shared/src/index.ts';
+import { releaseCopyRequestSchema, releaseCopyResponseSchema, draftDetailSchema, editedStepSchema, eventSchema, approvalRequestSchema, releaseSchema, draftPatchSchema, sessionStartSchema, normalizeRelease, projectReleaseToSessionSteps, learnerSessionSchema, type Member } from '../../../packages/shared/src/index.ts';
 import { learnerProfileCreateRequestSchema, learnerProfileUpdateRequestSchema, learnerProfileDetailSchema, learnerProfileListResponseSchema, toLearnerProfileSummary } from '../../../packages/shared/src/learner-profile.ts';
 import { supportResumeRequestSchema, supportResumeResponseSchema, supportRecordSchema, supportRecordSaveRequestSchema, supportOperationRequestSchema, supportStartResponseSchema, supportAcknowledgeResponseSchema, supportClaimResponseSchema, supportRequestListResponseSchema, supportRequestStatusQuerySchema, staffIdentitySchema, staffSupportSessionSchema } from '../../../packages/shared/src/support.ts';
+import { draftCorrectionSchema, correctionsListResponseSchema } from '../../../packages/shared/src/generation.ts';
 import { workGuideListResponseSchema, workGuideRecordsResponseSchema } from '../../../packages/shared/src/work-guides.ts';
 import { MemoryRepository, seed, doc, id, now, type Repository, type Storage, type Auth, type Doc } from './adapters.ts';
-import { configuredAuth } from './firebase-auth.ts';
+import { configuredAuth, AuthServiceUnavailableError } from './firebase-auth.ts';
 import { configuredStorage } from './cloud-storage.ts';
 import { configuredRepository } from './firestore-repository.ts';
 import { configuredTts, type TtsAdapter } from './tts.ts';
 import { media } from './media.ts';
+import type { GenerationQueue } from './cloud-tasks.ts';
+import { generationEnabled } from './generation-control.ts';
+import { frozenCorrections } from './correction-input.ts';
+import { nextCorrectionSequence } from './correction-order.ts';
+import { guideGenerationRequestSchema, improvementGuideInputSnapshotSchema, initialGuideInputSnapshotSchema, correctionContextInputSnapshotSchema, improvementRetryInputSchema } from '../../../packages/shared/src/generation.ts';
 export class HttpError extends Error {
     constructor(public status: number, public code: string) {
         super(code);
@@ -42,7 +48,8 @@ export function createApp(options: {
     globalLimit?: number;
     internalToken?: string;
     modelId?: string;
-    runJob?: (jobId: string) => Promise<void>;
+    runJob?: (jobId: string) => Promise<unknown>;
+    queue?: GenerationQueue;
 } = {}) {
     const db = options.db ?? configuredRepository();
     if (!options.db && db instanceof MemoryRepository)
@@ -66,6 +73,7 @@ export function createApp(options: {
     app.use('/api/v1', async (req: Request, res: Response, next: NextFunction) => {
         try {
             if (['/api/v1/internal/generate', '/api/v1/internal/drain'].includes(req.path)) {
+                if (options.queue) fail(404, 'NOT_FOUND');
                 if (req.headers.authorization !== `Bearer ${internalToken}`)
                     fail(403, 'INTERNAL_ONLY');
                 return next();
@@ -168,6 +176,7 @@ export function createApp(options: {
         });
         res.json(workGuideRecordsResponseSchema.parse({ schemaVersion: '1', records: result }));
     });
+    api.get('/identity', (_req, res) => { const m = member(res); send(res, { uid: m.uid, role: m.role }); });
     // ルートは対象ごとにまとめる。新しいルートは対象のまとまりへ追加し、競合時は両側のルートを残す。
     api.post('/tasks', async (req, res) => {
         staff(res);
@@ -178,7 +187,7 @@ export function createApp(options: {
     });
     api.get('/tasks', async (req, res) => {
         staff(res);
-        send(res, { tasks: await Promise.all((await list('tasks', res)).map(async (t) => ({ ...t, generationJobs: (await list('generationJobs', res)).filter(j => j.taskId === t.id).map(j => ({ jobId: j.id, draftId: j.draftId, status: j.status })) }))) });
+        send(res, { tasks: await Promise.all((await list('tasks', res)).map(async (t) => ({ ...t, generationJobs: (await list('generationJobs', res)).filter(j => j.taskId === t.id && j.kind !== 'correction_context').map(j => ({ jobId: j.id, draftId: j.draftId, status: j.status })) }))) });
     });
     api.get('/tasks/:id', async (req, res) => {
         staff(res);
@@ -251,26 +260,62 @@ export function createApp(options: {
     });
     api.post('/tasks/:id/generations', async (req, res) => {
         staff(res);
-        const { learnerId } = generationRequestSchema.parse(req.body);
+        const request = guideGenerationRequestSchema.parse(req.body);
+        const { learnerId } = request;
         const t = await get('tasks', req.params.id, res);
-        const learner = await get('learners', learnerId, res);
-        if (t.status !== 'ready')
-            fail(409, 'VIDEO_NOT_READY');
+        await get('learners', learnerId, res);
+        const improvement = 'clientRequestId' in request ? request : undefined;
+        const requestHash = improvement ? createHash('sha256').update(JSON.stringify({ taskId: t.id, ...improvement })).digest('hex') : undefined;
         const result = await db.transaction(async () => {
             const jobs = await db.all('generationJobs');
-            if (jobs.reduce((n, j) => n + j.budgetUsed, 0) >= limit || jobs.filter(j => j.taskId === t.id).reduce((n, j) => n + j.budgetUsed, 0) >= 10)
+            if (improvement) {
+                const existing = jobs.find(j => j.clientRequestId === improvement.clientRequestId && j.orgId === t.orgId);
+                if (existing) {
+                    if (existing.requestHash !== requestHash) fail(409, 'IDEMPOTENCY_CONFLICT');
+                    return { jobId: existing.id, draftId: existing.draftId };
+                }
+            }
+            if (!await generationEnabled(db)) fail(409, 'GENERATION_PAUSED');
+            if ((await get('tasks', t.id, res)).status !== 'ready') fail(409, 'VIDEO_NOT_READY');
+            const learner = await get('learners', learnerId, res);
+            if (jobs.reduce((n, j) => n + j.budgetUsed, 0) >= limit || jobs.filter(j => j.taskId === t.id && j.kind !== 'correction_context').reduce((n, j) => n + j.budgetUsed, 0) >= 10)
                 fail(409, 'GENERATION_LIMIT');
+            const correctionInputs = await frozenCorrections(db, t.orgId, learnerId, t.id);
+            let inputSnapshot: unknown;
+            if (improvement) {
+                const source = await get('releases', improvement.sourceReleaseId, res);
+                const assignment = (await db.all('assignments')).find(a => a.orgId === t.orgId && a.taskId === t.id && a.learnerId === learnerId);
+                if (source.taskId !== t.id || source.learnerId !== learnerId || assignment?.releaseId !== source.id) fail(409, 'SOURCE_RELEASE_CHANGED');
+                for (const input of improvement.supportInputs) {
+                    const record = await get('supportRecords', input.recordId, res);
+                    if (record.taskId !== t.id || record.learnerId !== learnerId || record.revision !== input.revision) fail(409, 'SUPPORT_RECORD_CHANGED');
+                }
+                inputSnapshot = improvementGuideInputSnapshotSchema.parse({ taskId: t.id, learnerId, sourceReleaseId: source.id,
+                    sourceReleaseVersion: source.version, supportInputs: improvement.supportInputs, correctionRefs: correctionInputs.map(c => ({ correctionId: c.correctionId, draftRevision: c.draftRevision })), correctionInputs,
+                    preferences: { sentenceLength: learner.preferences.sentenceLength ?? 40, splitHints: learner.preferences.splitHints ?? '', audioGuidance: false },
+                    displayMode: learner.preferences.displayMode ?? 'photo_text', confirmedGuidance: learner.confirmedGuidance ?? [] });
+            } else if (correctionInputs.length) {
+                const video = await get('assets', t.videoAssetId, res);
+                inputSnapshot = initialGuideInputSnapshotSchema.parse({ taskId: t.id, learnerId, videoAssetId: video.id, title: t.title,
+                    completionCriteria: '帯紙の向き、袋口、テープを見本と比較する', durationMs: video.durationMs,
+                    preferences: { sentenceLength: learner.preferences.sentenceLength ?? 40, splitHints: learner.preferences.splitHints ?? '', audioGuidance: false },
+                    displayMode: learner.preferences.displayMode ?? 'photo_text', confirmedGuidance: learner.confirmedGuidance ?? [], correctionInputs });
+            }
             const d = doc(t.orgId, {
-                taskId: t.id, learnerId, displayMode: learner.preferences.displayMode ?? 'photo_text', audioGuidance: learner.preferences.audioGuidance ?? false, revision: 0, status: 'generating', editedSteps: [], reviewChecks: { presentationConfirmed: false, flagResolution: '', steps: {} }, updatedBy: member(res).uid
+                taskId: t.id, learnerId, displayMode: learner.preferences.displayMode ?? 'photo_text', audioGuidance: learner.preferences.audioGuidance ?? false, revision: 0, status: 'generating', editedSteps: [], reviewChecks: { presentationConfirmed: false, flagResolution: '', steps: {} }, updatedBy: member(res).uid,
+                ...(improvement ? { sourceReleaseId: improvement.sourceReleaseId, origin: 'improvement', appliedSupportRecordRefs: [] } : {})
             });
             const j = doc(t.orgId, {
-                taskId: t.id, draftId: d.id, status: 'queued', attempt: 0, budgetUsed: 1, modelId: options.modelId ?? 'fake-fixture', promptVersion: '1'
+                taskId: t.id, draftId: d.id, kind: 'guide', status: 'queued', attempt: 0, budgetUsed: 1, modelId: options.modelId ?? 'fake-fixture', promptVersion: '1',
+                ...(inputSnapshot ? { inputSnapshot } : {}), ...(improvement ? { clientRequestId: improvement.clientRequestId, requestHash } : {})
             });
             d.jobId = j.id;
             await db.put('drafts', d);
             await db.put('generationJobs', j);
             return { jobId: j.id, draftId: d.id };
         });
+        // The committed queued job is recovered by the external reconciliation schedule.
+        if (options.queue) { try { await options.queue.enqueue(result.jobId); } catch { /* Recovery retries after transient enqueue errors. */ } }
         send(res, result, 202);
     });
     api.post('/releases/:id/drafts', async (req, res) => {
@@ -320,14 +365,30 @@ export function createApp(options: {
     api.get('/jobs/:id', async (req, res) => {
         staff(res);
         const j = await get('generationJobs', req.params.id, res);
-        send(res, { status: j.status, draftId: j.draftId, errorCode: j.errorCode });
+        let retryInput: unknown;
+        if (j.kind === 'guide' && j.status === 'failed' && j.inputSnapshot?.sourceReleaseId) {
+            const snapshot = improvementGuideInputSnapshotSchema.parse(j.inputSnapshot);
+            const draft = await get('drafts', j.draftId, res);
+            if (draft.jobId !== j.id || draft.taskId !== j.taskId || draft.learnerId !== snapshot.learnerId ||
+                snapshot.taskId !== j.taskId || draft.sourceReleaseId !== snapshot.sourceReleaseId)
+                fail(409, 'INVALID_IMPROVEMENT_JOB');
+            retryInput = improvementRetryInputSchema.parse({ learnerId: snapshot.learnerId,
+                sourceReleaseId: snapshot.sourceReleaseId, supportInputs: snapshot.supportInputs });
+        }
+        send(res, { status: j.status, draftId: j.draftId, errorCode: j.errorCode, ...(retryInput ? { retryInput } : {}) });
     });
     api.get('/drafts/:id', async (req, res) => {
         staff(res);
         const d = await get('drafts', req.params.id, res);
         if (d.sourceReleaseId) {
             const { id, orgId, createdAt, clientRequestId, modificationCount, correctionReason, ...detail } = d;
-            return send(res, { draft: draftDetailSchema.parse({ ...detail, schemaVersion: '1', draftId: id }) });
+            let referencedSupportInputs: unknown;
+            if (d.origin === 'improvement') {
+                const job = await get('generationJobs', d.jobId, res);
+                if (job.draftId !== d.id || job.taskId !== d.taskId || job.inputSnapshot?.sourceReleaseId !== d.sourceReleaseId) fail(422, 'INVALID_IMPROVEMENT_JOB');
+                referencedSupportInputs = improvementGuideInputSnapshotSchema.parse(job.inputSnapshot).supportInputs;
+            }
+            return send(res, { draft: draftDetailSchema.parse({ ...detail, schemaVersion: '1', draftId: id, ...(referencedSupportInputs ? { referencedSupportInputs } : {}) }) });
         }
         send(res, { draft: d });
     });
@@ -358,6 +419,18 @@ export function createApp(options: {
                 fail(409, 'REVISION_CONFLICT');
             await validSteps(d, input.editedSteps, res);
             const previousSteps = new Map<string, { step: z.infer<typeof editedStepSchema>; index: number }>(d.editedSteps.map((step: z.infer<typeof editedStepSchema>, index: number) => [step.stepId, { step, index }]));
+            const currentSteps = new Map(input.editedSteps.map((step, index) => [step.stepId, { step, index }]));
+            const changedFields = ['text', 'visibleCaution', 'imageAltText', 'imageAssetId', 'sourceStartMs', 'sourceEndMs', 'frameMs', 'verifiedObservation', 'verifiedSpeech', 'coaching', 'completionCheck'] as const;
+            const changes: z.infer<typeof draftCorrectionSchema>['changes'] = [];
+            for (const stepId of new Set([...previousSteps.keys(), ...currentSteps.keys()])) {
+                const before = previousSteps.get(stepId), after = currentSteps.get(stepId);
+                for (const field of changedFields) {
+                    const oldValue = before?.step[field] ?? null, newValue = after?.step[field] ?? null;
+                    if (oldValue !== newValue) changes.push({ stepId, field, before: oldValue, after: newValue });
+                }
+                const oldPosition = before?.index ?? null, newPosition = after?.index ?? null;
+                if (oldPosition !== newPosition) changes.push({ stepId, field: 'position', before: oldPosition, after: newPosition });
+            }
             const reviewChecks: typeof input.reviewChecks = { ...input.reviewChecks, steps: {} };
             if ((displayMode ?? d.displayMode ?? 'photo_text') !== (d.displayMode ?? 'photo_text') ||
                 (audioGuidance ?? d.audioGuidance ?? false) !== (d.audioGuidance ?? false) ||
@@ -383,9 +456,48 @@ export function createApp(options: {
             await db.put('drafts', {
                 ...d, ...(displayMode !== undefined ? { displayMode } : {}), ...(audioGuidance !== undefined ? { audioGuidance } : {}), ...(appliedSupportRecordRefs !== undefined ? { appliedSupportRecordRefs } : {}), ...(correctionReason !== undefined ? { correctionReason } : {}), editedSteps: input.editedSteps, reviewChecks, modificationCount, revision: d.revision + 1, updatedBy: member(res).uid
             });
-            return { revision: d.revision + 1, reviewChecks };
+            let contextJobId: string | undefined;
+            if (changes.length) {
+                const correctionSequence = await nextCorrectionSequence(db, d.orgId, d.learnerId, d.taskId);
+                const correction = doc(member(res).orgId, { correctionSequence, taskId: d.taskId, learnerId: d.learnerId, draftId: d.id,
+                    draftRevision: d.revision + 1, changes, ...(correctionReason !== undefined ? { reason: correctionReason } : {}), createdBy: member(res).uid });
+                const eligible = changes.filter(c => ['text', 'imageAltText', 'visibleCaution'].includes(c.field));
+                if (eligible.length && await generationEnabled(db)) {
+                    const jobs = await db.all('generationJobs');
+                    if (jobs.reduce((n, j) => n + j.budgetUsed, 0) < limit) {
+                        const task = await get('tasks', d.taskId, res);
+                        const snapshot = correctionContextInputSnapshotSchema.safeParse({ correctionId: correction.id, draftRevision: correction.draftRevision, title: task.title,
+                            changes: eligible.map(c => ({ stepId: c.stepId, field: c.field, before: c.before ?? '', after: c.after ?? '' })) });
+                        if (snapshot.success) {
+                            const job = doc(d.orgId, { taskId: d.taskId, draftId: d.id, kind: 'correction_context', status: 'queued', attempt: 0, budgetUsed: 1,
+                                modelId: options.modelId ?? 'fake-fixture', promptVersion: '1', inputSnapshot: snapshot.data });
+                            contextJobId = job.id;
+                            correction.contextJobId = job.id;
+                            await db.put('generationJobs', job);
+                        }
+                    }
+                }
+                const { id: correctionId, orgId: _orgId, correctionSequence: _sequence, ...details } = correction;
+                draftCorrectionSchema.parse({ ...details, schemaVersion: '1', correctionId });
+                await db.put('draftCorrections', correction);
+            }
+            return { revision: d.revision + 1, reviewChecks, contextJobId };
         });
-        send(res, result);
+        // The scheduler (or local drain) discovers the committed job without delaying editing.
+        const { contextJobId: _contextJobId, ...response } = result;
+        send(res, response);
+    });
+    api.get('/learners/:learnerId/work-guides/:taskId/corrections', async (req, res) => {
+        staff(res);
+        await get('learners', req.params.learnerId, res);
+        await get('tasks', req.params.taskId, res);
+        const entries = (await list('draftCorrections', res)).filter(c => c.learnerId === req.params.learnerId && c.taskId === req.params.taskId);
+        const jobs = await list('generationJobs', res);
+        const corrections = entries.map(({ id, orgId, correctionSequence, ...entry }) => {
+            const job = jobs.find(j => j.id === entry.contextJobId && j.kind === 'correction_context');
+            return { ...entry, schemaVersion: '1', correctionId: id, ...(job ? { contextJobStatus: job.status } : {}) };
+        }).sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.correctionId.localeCompare(b.correctionId));
+        res.json(correctionsListResponseSchema.parse({ corrections }));
     });
     api.post('/drafts/:id/frames', async (req, res) => {
         staff(res);
@@ -425,10 +537,13 @@ export function createApp(options: {
             const source = await get('releases', d.sourceReleaseId, res);
             if (source.taskId !== d.taskId || source.learnerId !== d.learnerId)
                 fail(422, 'INVALID_SOURCE_RELEASE');
-            if ((d.appliedSupportRecordRefs ?? []).some((ref: any) => !(source.appliedSupportRecordRefs ?? []).some((inherited: any) => inherited.recordId === ref.recordId && inherited.revision === ref.revision)))
+            const job = d.jobId ? await get('generationJobs', d.jobId, res) : undefined;
+            if (job && (job.draftId !== d.id || job.taskId !== d.taskId || job.inputSnapshot?.sourceReleaseId !== source.id)) fail(422, 'INVALID_IMPROVEMENT_JOB');
+            const allowed = job ? job.inputSnapshot.supportInputs : source.appliedSupportRecordRefs ?? [];
+            if ((d.appliedSupportRecordRefs ?? []).some((ref: any) => !allowed.some((input: any) => input.recordId === ref.recordId && input.revision === ref.revision)))
                 fail(422, 'INVALID_SUPPORT_RECORD_REFS');
         }
-        else if ((d.aiProposal.reviewFlags.length || d.aiProposal.steps.some((s: any) => s.reviewFlags.length)) && !d.reviewChecks.flagResolution.trim())
+        if (d.aiProposal && (d.aiProposal.reviewFlags.length || d.aiProposal.steps.some((s: any) => s.reviewFlags.length)) && !d.reviewChecks.flagResolution.trim())
             fail(422, 'FLAGS_UNRESOLVED');
         const releaseId = id();
         const assets: Doc[] = [];
@@ -854,7 +969,7 @@ export function createApp(options: {
     api.post('/internal/drain', async (req, res) => {
         if (!options.runJob)
             fail(503, 'WORKER_UNAVAILABLE');
-        const j = (await db.all('generationJobs')).find(j => j.status === 'queued' || j.status === 'running' && j.leaseUntil <= Date.now());
+        const j = (await db.all('generationJobs')).find(j => j.status === 'queued' || j.status === 'running' && (j.leaseUntil == null || j.leaseUntil <= Date.now()));
         if (j)
             await options.runJob(j.id);
         send(res, { status: 'processed' });
@@ -867,8 +982,8 @@ export function createApp(options: {
         send(res, { status: 'processed' });
     });
     app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-        const status = err instanceof HttpError ? err.status : typeof err.status === 'number' ? err.status : err instanceof z.ZodError || err.type === 'entity.parse.failed' ? 422 : 500;
-        res.status(status).json({ error: { code: status === 500 ? 'INTERNAL_ERROR' : err.code ?? 'INVALID_INPUT', message: status === 500 ? '処理に失敗しました' : '操作を確認してください', requestId: res.locals.requestId } });
+        const status = err instanceof AuthServiceUnavailableError ? 503 : err instanceof HttpError ? err.status : typeof err.status === 'number' ? err.status : err instanceof z.ZodError || err.type === 'entity.parse.failed' ? 422 : 500;
+        res.status(status).json({ error: { code: err instanceof AuthServiceUnavailableError ? 'AUTH_SERVICE_UNAVAILABLE' : status === 500 ? 'INTERNAL_ERROR' : err.code ?? 'INVALID_INPUT', message: err instanceof AuthServiceUnavailableError ? '認証サービスを利用できません。時間をおいて再度お試しください' : status === 500 ? '処理に失敗しました' : '操作を確認してください', requestId: res.locals.requestId } });
     });
     return {
         app, db, storage, limit
