@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import { generationRequestSchema } from './generation.ts';
 export * from './generation.ts';
+export * from './work-guides.ts';
 export const schemaVersion = '1' as const;
 const time = z.number().int().nonnegative();
 const candidate = z.string().max(200);
@@ -89,8 +90,6 @@ export type ApprovalResponse = {
     releaseId: string;
     version: number;
 };
-
-export * from './learner-profile.ts';
 
 // Work-guide wire contracts. Existing application DTOs above remain source-compatible.
 const versionSchema = z.literal(schemaVersion);
@@ -206,4 +205,6 @@ export function projectReleaseToSessionSteps(release: Release) {
             : photoTextSessionStepSchema.parse({ ...photo, text: s.text, visibleCaution: s.visibleCaution });
     });
 }
+
+export * from './learner-profile.ts';
 export * from './support.ts';
