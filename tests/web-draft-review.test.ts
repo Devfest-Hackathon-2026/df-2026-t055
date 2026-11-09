@@ -24,7 +24,7 @@ source = source.slice(source.indexOf('function Draft('), source.indexOf('\nfunct
 source = `import React, {useState,useEffect,useRef} from ${JSON.stringify(hookUrl)};
 import {missingDraftChecks,draftPreviewMode,savedDraftReview} from ${JSON.stringify(new URL('../apps/web/src/draft-review.ts', import.meta.url).href)};
 import {isManualDraft,releaseCopySource,beginReleaseCopy} from ${JSON.stringify(new URL('../apps/web/src/release-copy.ts', import.meta.url).href)};
-import {releaseCopyResponseSchema} from ${JSON.stringify(new URL('../packages/shared/src/index.ts', import.meta.url).href)};
+import {releaseCopyResponseSchema,improvementRetryInputSchema} from ${JSON.stringify(new URL('../packages/shared/src/index.ts', import.meta.url).href)};
 const ImprovementReview=()=>null;
 const api=(...args)=>globalThis.draftApi(...args); const go=(path)=>globalThis.draftGo?.(path); const Asset=()=>null;
 export ${source}`;
@@ -42,15 +42,18 @@ function text(tree: any): string {
 }
 function button(tree: any, label: string) { return nodes(tree).find(n => n.type === 'button' && text(n) === label); }
 
-function harness() {
+function harness(overrides: Record<string, unknown> = {}) {
     hooks.reset();
     const step = {stepId:'one',text:'折る',imageAssetId:'image',imageAltText:'手元',visibleCaution:'端に注意',coaching:'手本を示す',sourceStartMs:0,sourceEndMs:1000,frameMs:500,verifiedObservation:'',verifiedSpeech:'',completionCheck:''};
     const checks = {presentationConfirmed:true,flagResolution:'対応済み',steps:{one:{videoVerified:true,photoTextVerified:true}}};
     let server:any = {revision:1,status:'editing',taskId:'task',learnerId:'a',editedSteps:[step],reviewChecks:checks,displayMode:'photo_only',audioGuidance:true,aiProposal:{reviewFlags:['確認'],steps:[]}};
+    server = { ...server, ...overrides };
     let fail = 0, releaseChecks = false;
     const calls:any[] = [], storage = new Map();
     Object.assign(globalThis, {localStorage:{getItem:(k:string)=>storage.get(k),setItem:(k:string,v:string)=>storage.set(k,v),removeItem:(k:string)=>storage.delete(k)}, draftApi:async (url:string,method='GET',body?:any)=>{
         calls.push({url,method,body});
+        if(method==='GET' && url === '/handover/releases') return { releases: [{ releaseId: 'source', title: '作業', version: 1 }] };
+        if(method==='GET' && url === '/handover/releases/source') return { release: { approvedBy: 'staff', approvedAt: '2026-01-01T00:00:00Z', learnerSteps: [], staffGuide: [] } };
         if(method==='GET') return structuredClone(url.startsWith('/tasks')?{task:{}}:{draft:server});
         if(fail) throw Object.assign(Error('通信失敗'),{status:fail});
         if(method==='PATCH') {
@@ -76,6 +79,8 @@ test('review helpers list missing steps and flags, default mode, and validate se
 });
 test('labelled edits PATCH presentation and alt, server checks replace local checks, re-confirm then approve',async()=>{
     const h=harness();let tree=await open(h);
+    assert.match(text(tree), /修正は、次回のAI下書きに使われます/);
+    assert.match(text(tree), /本人を特定できる情報を入れないでください/);
     assert.equal(input(tree,'表示方法').props.value,'photo_only'); assert.equal(input(tree,'音声').props.checked,true);
     for(const n of nodes(tree).filter(n=>['input','textarea','select'].includes(n.type))) assert.ok(nodes(tree).some(l=>l.type==='label'&&nodes(l).includes(n)));
     change(tree,'表示方法','photo_text');tree=h.render();change(tree,'音声',false);tree=h.render();change(tree,'写真の代替','新しい手元');tree=h.render();
@@ -91,6 +96,19 @@ test('labelled edits PATCH presentation and alt, server checks replace local che
     assert.equal(button(tree,'この内容を承認').props.disabled,false);
     button(tree,'この内容を承認').props.onClick();button(tree,'この内容を承認').props.onClick();await settle();
     assert.equal(h.calls.filter(c=>c.url.endsWith('/approve')).length,1);assert.match(text(h.render()),/承認済みです/);
+});
+test('improvement review receives references and saves only selected record versions', async () => {
+    const refs = [{ recordId: 'record', revision: 2, summary: '確認済み要約' }];
+    const h = harness({ origin: 'improvement', sourceReleaseId: 'source', jobId: 'job', referencedSupportInputs: refs });
+    let tree = await open(h);
+    const review = nodes(tree).find(n => n.type?.name === 'ImprovementReview');
+    assert.ok(review);
+    assert.deepEqual(review.props.references, refs);
+    assert.match(text(tree), /本人を特定できる情報を入れないでください/);
+    review.props.onChange([{ recordId: 'record', revision: 2 }]);
+    tree = h.render();
+    button(tree, '編集と確認を保存').props.onClick(); await settle();
+    assert.deepEqual(h.calls.find(c => c.method === 'PATCH').body.appliedSupportRecordRefs, [{ recordId: 'record', revision: 2 }]);
 });
 test('409 and failed send preserve all input, fetch latest separately, retry latest revision',async()=>{
     const h=harness();let tree=await open(h);
@@ -212,4 +230,69 @@ test('staff copy handlers use the real API through edit, re-confirm, approval an
     // Source fetch errors remain visible through the existing action error handling; editing stays available.
     failSource=true;let error='';hooks.reset();hooks.begin();Draft({id:manual.id,action:async(fn:any)=>{try{await fn();}catch(e){error=(e as Error).message;}}});await hooks.flush();assert.equal(error,'出所取得失敗');
     failSource=false;hooks.reset();renderHandover(false);await hooks.flush();tree=renderHandover(false);assert.equal(button(tree,'コピーして直す'),undefined);
+});
+
+test('failed improvement retry keeps source and summaries, and reuses its new request key after a network error', async () => {
+    const h = harness();
+    Object.assign(h.server, { status: 'failed', jobId: 'failed-job', sourceReleaseId: 'source', origin: 'improvement' });
+    const posts: any[] = []; let destination = '';
+    const retryInput = { learnerId: 'a', sourceReleaseId: 'source', supportInputs: [{ recordId: 'record', revision: 3, summary: '確認した要約' }] };
+    Object.assign(globalThis, { draftGo: (path: string) => { destination = path; }, draftApi: async (url: string, method = 'GET', body?: any) => {
+        if (url === '/drafts/draft') return { draft: h.server };
+        if (url === '/tasks/task') return { task: {} };
+        if (url === '/jobs/failed-job') return { status: 'failed', draftId: 'draft', retryInput };
+        if (method === 'POST') { posts.push(body); if (posts.length === 1) throw Error('network'); return { jobId: 'new-job', draftId: 'new-draft' }; }
+        throw Error('unexpected');
+    } });
+    let tree = await open(h);
+    button(tree, '新しいジョブで再試行').props.onClick(); await settle(); tree = h.render();
+    assert.match(text(tree), /再試行できませんでした/);
+    button(tree, '新しいジョブで再試行').props.onClick(); await settle();
+    assert.equal(posts.length, 2);
+    assert.deepEqual({ learnerId: posts[0].learnerId, sourceReleaseId: posts[0].sourceReleaseId, supportInputs: posts[0].supportInputs }, retryInput);
+    assert.equal(posts[0].clientRequestId, posts[1].clientRequestId);
+    assert.equal(destination, '/staff/tasks/task/drafts/new-draft');
+});
+
+test('failed improvement retry shows conflict and reselect path without falling back to initial generation', async () => {
+    const h = harness(); Object.assign(h.server, { status: 'failed', jobId: 'failed-job', sourceReleaseId: 'source', origin: 'improvement' });
+    const posts: any[] = []; let destination = '';
+    Object.assign(globalThis, { draftGo: (path: string) => { destination = path; }, draftApi: async (url: string, method = 'GET', body?: any) => {
+        if (url === '/drafts/draft') return { draft: h.server };
+        if (url === '/tasks/task') return { task: {} };
+        if (url === '/jobs/failed-job') return { status: 'failed', draftId: 'draft', retryInput: { learnerId: 'a', sourceReleaseId: 'source', supportInputs: [{ recordId: 'r', revision: 1, summary: '要約' }] } };
+        if (method === 'POST') { posts.push(body); throw Object.assign(Error('stale'), { status: 409 }); }
+        throw Error('unexpected');
+    } });
+    let tree = await open(h); button(tree, '新しいジョブで再試行').props.onClick(); await settle(); tree = h.render();
+    assert.match(text(tree), /記録を確認し、選び直して/);
+    assert.equal(posts.length, 1); assert.equal(posts[0].sourceReleaseId, 'source'); assert.equal(posts[0].supportInputs[0].summary, '要約');
+    button(tree, '本人別の作業一覧で記録を選び直す').props.onClick(); assert.equal(destination, '/staff/learners/a');
+});
+
+test('missing retry snapshot never falls back to creating an initial generation', async () => {
+    const h = harness(); Object.assign(h.server, { status: 'failed', jobId: 'failed-job', sourceReleaseId: 'source', origin: 'improvement' });
+    const posts: any[] = [];
+    Object.assign(globalThis, { draftApi: async (url: string, method = 'GET', body?: any) => {
+        if (url === '/drafts/draft') return { draft: h.server };
+        if (url === '/tasks/task') return { task: {} };
+        if (url === '/jobs/failed-job') return { status: 'failed', draftId: 'draft' };
+        if (method === 'POST') posts.push(body);
+        throw Error('unexpected');
+    } });
+    let tree = await open(h); button(tree, '新しいジョブで再試行').props.onClick(); await settle(); tree = h.render();
+    assert.match(text(tree), /再試行できませんでした/); assert.equal(posts.length, 0);
+});
+
+test('initial generation retry remains an initial request', async () => {
+    const h = harness(); Object.assign(h.server, { status: 'failed', jobId: 'failed-job' });
+    const posts: any[] = [];
+    Object.assign(globalThis, { draftApi: async (url: string, method = 'GET', body?: any) => {
+        if (url === '/drafts/draft') return { draft: h.server };
+        if (url === '/tasks/task') return { task: {} };
+        if (method === 'POST') { posts.push(body); return { jobId: 'next', draftId: 'next-draft' }; }
+        throw Error('unexpected');
+    } });
+    const tree = await open(h); button(tree, '新しいジョブで再試行').props.onClick(); await settle();
+    assert.deepEqual(posts, [{ learnerId: 'a' }]);
 });
