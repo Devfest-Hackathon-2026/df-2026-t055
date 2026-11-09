@@ -18,32 +18,38 @@ const supportInputs = z.array(supportInputSchema).min(1).refine(
     inputs => new Set(inputs.map(input => input.recordId)).size === inputs.length,
     'Duplicate recordId'
 );
-export const improvementGenerationRequestSchema = z.object({
-    learnerId: id, sourceReleaseId: id, supportInputs, clientRequestId: id.max(100)
-}).strict();
+export const improvementRetryInputSchema = z.object({ learnerId: id, sourceReleaseId: id, supportInputs }).strict();
+export const improvementGenerationRequestSchema = improvementRetryInputSchema.extend({ clientRequestId: id.max(100) }).strict();
 // The legacy initial request has no tag; strict shapes distinguish it from improvements.
 export const guideGenerationRequestSchema = z.union([initialGenerationRequestSchema, improvementGenerationRequestSchema]);
 export const generationCreateResponseSchema = z.object({ schemaVersion: version, jobId: id, draftId: id }).strict();
 export const generationJobStatusSchema = generationCreateResponseSchema.extend({
-    kind: z.enum(['guide', 'correction_context']), status, errorCode
+    kind: z.enum(['guide', 'correction_context']), status, errorCode, retryInput: improvementRetryInputSchema.optional()
 }).strict();
 export const generationPreferencesSchema = z.object({
     sentenceLength: z.number().int().min(1).max(40), splitHints: z.string().max(200), audioGuidance: z.boolean()
 }).strict();
+export const frozenCorrectionSchema = z.object({
+    correctionId: id, draftRevision: revision,
+    changes: z.array(z.object({ stepId: id, field: z.enum(['text', 'imageAltText', 'visibleCaution']), before: z.string().max(2000), after: z.string().max(2000) }).strict()).min(1),
+    contextSummary: z.lazy(() => correctionContextOutputSchema).optional()
+}).strict();
 export const initialGuideInputSnapshotSchema = z.object({
     taskId: id, learnerId: id, videoAssetId: id, title: id,
     completionCriteria: z.string().max(2000), durationMs: revision,
-    preferences: generationPreferencesSchema, displayMode, confirmedGuidance
+    preferences: generationPreferencesSchema, displayMode, confirmedGuidance,
+    correctionInputs: z.array(frozenCorrectionSchema).max(20).optional()
 }).strict();
 export const correctionRefSchema = z.object({ correctionId: id, draftRevision: revision }).strict();
 export const improvementGuideInputSnapshotSchema = z.object({
     taskId: id, learnerId: id, sourceReleaseId: id, sourceReleaseVersion: z.number().int().min(1),
     supportInputs, correctionRefs: z.array(correctionRefSchema).max(20).refine(
         refs => new Set(refs.map(ref => ref.correctionId)).size === refs.length, 'Duplicate correctionId'
-    ), displayMode, confirmedGuidance
+    ), displayMode, confirmedGuidance, correctionInputs: z.array(frozenCorrectionSchema).max(20).optional()
 }).strict();
-const fields = ['text', 'visibleCaution', 'imageAltText', 'imageAssetId', 'sourceStartMs', 'sourceEndMs', 'frameMs', 'verifiedObservation', 'verifiedSpeech', 'coaching', 'completionCheck'] as const;
-const value = z.union([z.string().max(2000), z.number().finite()]);
+const fields = ['text', 'visibleCaution', 'imageAltText', 'imageAssetId', 'sourceStartMs', 'sourceEndMs', 'frameMs', 'verifiedObservation', 'verifiedSpeech', 'coaching', 'completionCheck', 'position'] as const;
+// null represents an absent step or optional field; positions are zero-based.
+const value = z.union([z.string().max(2000), z.number().finite(), z.null()]);
 export const draftCorrectionChangeSchema = z.object({ stepId: id, field: z.enum(fields), before: value, after: value }).strict();
 export const correctionContextOutputSchema = z.object({
     editSummary: z.string().trim().min(1).max(500), nextDraftHint: z.string().trim().min(1).max(500),
@@ -51,7 +57,7 @@ export const correctionContextOutputSchema = z.object({
 }).strict();
 export const draftCorrectionSchema = z.object({
     schemaVersion: version, correctionId: id, taskId: id, learnerId: id, draftId: id, draftRevision: revision,
-    changes: z.array(draftCorrectionChangeSchema).min(1).max(220), reason: z.string().max(2000).optional(),
+    changes: z.array(draftCorrectionChangeSchema).min(1).max(480), reason: z.string().max(2000).optional(),
     createdBy: id, createdAt: z.iso.datetime(), contextJobId: id.optional(), contextSummary: correctionContextOutputSchema.optional()
 }).strict();
 export const draftCorrectionWithContextSchema = draftCorrectionSchema.extend({ contextJobStatus: status.optional() }).strict();
