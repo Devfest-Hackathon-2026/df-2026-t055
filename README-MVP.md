@@ -105,7 +105,7 @@ devenv shell -- npm run format:check
 - `apps/generator`：HTTP内部エンドポイント、ローカルCloud Tasks代替、動画モデルのインターフェースとFake、リース・試行予算・出力検査・ffmpeg抽出。生成失敗では本人用データを作りません。
 - `apps/web`：React / TypeScript / Vite。支援・停止イベントは端末保存して再送。停止は送信成功後も端末に保持し、停止前に送ったnextの応答で画面を開きません。
 
-Repository、Storage、Auth、VideoModelはインターフェースで分離しています。ローカルではAPIプロセスだけがDBを所有し、generatorサービスは認証付き内部HTTPを呼びます。インメモリのtransactionは単一プロセス内で直列化し、変更をコミット時にまとめて公開します。Repositoryは非同期I/Oにも対応するポートです。Cloud Runへそのまま拡張する構成ではありません。本番環境変数 `NODE_ENV=production` では両エントリーポイントが起動を拒否し、ローカル認証が誤って公開されることを防ぎます。
+Repository、Storage、Auth、VideoModelはインターフェースで分離しています。ローカルではAPIプロセスだけがDBを所有し、generatorサービスは認証付き内部HTTPを呼びます。インメモリのtransactionは単一プロセス内で直列化し、変更をコミット時にまとめて公開します。Repositoryは非同期I/Oにも対応するポートです。Cloud Runへそのまま拡張する構成ではありません。`NODE_ENV=production` のAPIは本番バックエンド・HTTPSオリジン・エミュレーター不使用を検査し、generatorはクラウド用の起動設定を要求します。実GCP結合と初回公開は未検証です。
 
 本人ルーターは承認済み版だけから許可フィールドのDTOを組み立てます。原動画・下書き画像は403。承認画像は版ごとにコピーし、releaseの編集・削除APIを持ちません。実行中セッションは割当ポインタから独立したreleaseIdを保持します。stopだけは古いrevisionでも優先し、completed後の遅延stopも記録します。
 

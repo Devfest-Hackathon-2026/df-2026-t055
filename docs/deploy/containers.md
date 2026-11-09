@@ -4,7 +4,7 @@
 
 ## 現在の実行境界
 
-**この版は本番デプロイ不可。** API entrypointの `NODE_ENV=production` ガードを維持し、イメージはproductionを既定にする。generatorはCloud Tasks用の設定を明示した場合に限りクラウド用エンドポイントを起動する。ローカル検証だけ明示的に `NODE_ENV=development` を渡し、本番でdevelopmentに変えてガードを回避しない。
+API entrypointは `NODE_ENV=production` でFirebase・Firestore・Cloud Storage・Cloud Tasks・Vertex（動画とTTS）の設定、HTTPSのWEB_ORIGIN、エミュレーター未使用を確認して起動する。設定不足時は起動を拒否する。イメージはproductionを既定にする。実GCP結合と初回公開は未検証。generatorはCloud Tasks用の設定を明示した場合に限りクラウド用エンドポイントを起動する。ローカル検証だけ明示的に `NODE_ENV=development` を渡し、本番でdevelopmentに変えてガードを回避しない。
 
 - Firebase、Firestore、Storage、Cloud Tasks/OIDC、VertexとTTSのアダプター接続は先行ドラフトPRにある。実GCPの認証・IAM・ネットワーク・利用可能モデル・キュー設定の結合検証は未実施。
 - ローカルgeneratorはAPIへの認証付き転送とdrainポーリングを使う。クラウド用はFirestore等へ直接接続し、Cloud Tasks HTTP内で生成する。投入失敗・期限切れからの復旧には別途Cloud Schedulerが必要。
@@ -34,7 +34,7 @@ ffmpegはjohnvansickle.comの `ffmpeg-release-amd64-static.tar.xz`（ffprobe同�
 | `API_PORT` / `GENERATOR_PORT` | 明示値があればPORTより優先。通常のホスト起動の既定3001/3002は維持 |
 | `LISTEN_HOST` | イメージは0.0.0.0、通常のホスト起動は127.0.0.1 |
 | `TMPDIR` | /tmp。nodeユーザー（UID/GID 1000）で利用可能 |
-| `NODE_ENV` | production。APIは現状起動拒否。ローカルのみdevelopment |
+| `NODE_ENV` | production。APIは本番設定を検査。ローカルのみdevelopment |
 | `API_URL` | ローカルgeneratorからAPIへ接続するURL（既定http://127.0.0.1:3001） |
 | `INTERNAL_TOKEN` | ローカル両サービスへ同じ一時ランダム値を実行時に渡す。イメージやログへ保存しない |
 | `WEB_ORIGIN` | 公開WebのHTTPSオリジン。本番では公開URLと一致させる |
@@ -82,7 +82,7 @@ gcloud builds submit . --project="$PROJECT_ID" --config=cloudbuild.yaml \
 
 基盤担当はwebに必要なFirestore/Storage/Tasks enqueue権限、generatorに必要なFirestore/Storage/Vertex実行権限、Tasks呼出用と復旧Scheduler呼出用の専用アカウントにgeneratorのRun Invoker権限を最小範囲で付与する。キューは並列1、HTTP dispatch deadline240秒、Runはtimeout300秒・min0・max web2/generator1。Storageは非公開、ブラウザからFirestore/Storageへの直接アクセスなし。予算5/10/15ドル通知と15ドルでの受付停止運用を用意する。
 
-本番ガードの解除は必要アダプターと受入条件を実装・レビューした別変更で行う。その後、秘密を含まない環境設定ファイル（管理対象外）とdigestを用意して、例として次を実施する。
+本番起動条件の変更をレビューし、実GCPで必要アダプターと受入条件を確認する。初回配置には、秘密を含まない環境設定ファイル（管理対象外）とdigestを用意して、例として次を実施する。
 
 ```sh
 gcloud run deploy generator --project="$PROJECT_ID" --region="$REGION" \

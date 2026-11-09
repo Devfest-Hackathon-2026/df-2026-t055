@@ -15,7 +15,7 @@
 1. この設定をレビューしmainへ取り込む。Firebaseビルド設定の検証スクリプト `scripts/check-firebase-build-config.mjs`（#146）もmainに必要。
 2. FirebaseのWeb設定をトリガーの `_FIREBASE_API_KEY`、`_FIREBASE_AUTH_DOMAIN`、`_FIREBASE_PROJECT_ID` に設定する。
 3. 東京のArtifact RegistryにDockerリポジトリ `t055` を作る。
-4. 本番起動時の認証・保存・キュー接続を完成させ、Cloud Runの `web-api` と非公開 `generator` を初回配置する。認証認可、承認版の固定、即時停止を実環境で確認する。
+4. 本番起動条件の修正を取り込み、認証・保存・キュー接続の実環境設定を確認して、Cloud Runの `web-api` と非公開 `generator` を初回配置する。認証認可、承認版の固定、即時停止を実環境で確認する。
 5. ビルド用アカウントに、対象リポジトリのArtifact Registry Writer、対象Cloud RunサービスのCloud Run Developer、対象実行アカウントのService Account User、プロジェクトのLogs Writerを付与する。Cloud Buildサービスエージェントの標準権限も確認する。
 6. 無効のまま手動ビルドを実施し、成功したSHAと操作確認結果を残してからトリガーを有効化する。
 
