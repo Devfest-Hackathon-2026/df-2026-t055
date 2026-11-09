@@ -2,6 +2,10 @@
 
 > **現在のプロダクト仕様**は [docs/PRODUCT_SPEC.md](docs/PRODUCT_SPEC.md) です。過去の設計書・企画案・調査資料は [アーカイブ](docs/archive/README.md) にまとめています。AIエージェントは [AGENTS.md](AGENTS.md) から読み始めてください。
 
+## ローカル開発（MVP）
+
+開発用のコード（ローカル専用MVP。Fake生成・インメモリ保存で、実GCPには未接続）が `apps/` と `packages/` にあります。起動手順・前提環境・検証コマンドは [README-MVP.md](README-MVP.md) を参照してください。要点：`npm install` のあと `npm run dev` で職員画面 `http://localhost:5173/staff` が開きます。架空アカウントを使うローカル専用デモであり、実データは入れないでください。
+
   DevFest Hackathon 2026 のチームの **最終提出用** リポジトリです。提出期限までに、作品のコードと資料をこのリポジトリに置いてください。
 
   このリポジトリは **公開（public）** です。開催中も、運営・審査員・ほかの参加者が見られます。

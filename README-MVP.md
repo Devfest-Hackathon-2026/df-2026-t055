@@ -84,15 +84,13 @@ Repository、Storage、Auth、VideoModelはインターフェースで分離し�
 5. **IAM**：web / generator / Tasks呼出用サービスアカウントを分離し、Vertex権限はgeneratorだけ。Firestore・Storage・Tasksの最小権限、公開ACL禁止、鍵ファイルなしのADCを設定。
 6. **Cloud Runデプロイ**：ffmpegを含む2コンテナ、Cloud Build / Artifact Registry、同一オリジンHTTPS、最小0・最大web2/generator1、東京基本のリージョン、5/10/15ドル通知、生成停止運用、失敗コピーの期限削除、11/15の素材・履歴削除を設定。Google接続後は実動画・実モデルで中核フローと認可を再試験します。
 
-未定義の判断と検証環境の制約は [TODO.md](TODO.md) に記録しています。この開発環境ではnpmのネットワークとポート待受が禁止されているため、Vite固有ビルドとブラウザでの結合確認は未実行です。利用可能なローカル依存で型検査、別バンドラによるReactコードの変換、およびAPI自動テスト17件に成功しました。現在の受入条件は [現行プロダクト仕様](docs/PRODUCT_SPEC.md) を参照してください。
+未定義の判断と検証環境の制約は [TODO.md](TODO.md) に記録しています。現在の受入条件は [現行プロダクト仕様](docs/PRODUCT_SPEC.md) を参照してください。
+
+移植後の検証記録（2026-11-08、新規チェックアウトから実施）：`npm ci`、`npm run typecheck`、`npm test`（21件全通過・skipなし）、`npm run build`（Viteビルド含む）、APIサーバーの単体起動とHTTP応答を確認済みです。ブラウザでの画面操作は未確認です。
 
 ## フェーズのコミット
 
-元の `.git` は実行環境により読み取り専用です。5フェーズのコミットは別の書込可能なGit管理領域で作成し、`mvp-phases.bundle` に保存します。書込み可能な環境で以下によりブランチとして取得できます。
-
-```sh
-git fetch ./mvp-phases.bundle HEAD:mvp-implementation
-```
+旧MVPは別の書込可能なGit管理領域で5フェーズのコミットとして作成され、ブランチ `feat/mvp-implementation` として取り込まれました。当時の bundle ファイルは現行リポジトリには含まれていません。
 
 元の作業ツリーには実装ファイルをそのまま配置しています。bundleから取得したブランチは、既存の未追跡ファイルとの衝突を避けるため別worktreeなどで確認してください。
 
