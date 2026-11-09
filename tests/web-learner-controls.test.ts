@@ -8,17 +8,18 @@ import {
   type LearnerControlLabel,
 } from '../apps/web/src/learner-controls.ts';
 
-test('seven original pictograms are distinct and failures retain approved alt text', () => {
+test('original pictograms are distinct and failures retain approved alt text', () => {
   const labels: LearnerControlLabel[] = [
     'はじめる',
     'もどる',
     'つぎへ',
     'おわる',
+    'おわります',
     '手伝って',
     'やめる',
     'つづける',
   ];
-  assert.equal(new Set(labels.map(learnerControlPath)).size, 7);
+  assert.equal(new Set(labels.map(learnerControlPath)).size, labels.length);
   assert.notEqual(learnerControlPath('手伝って'), learnerControlPath('やめる'));
   assert.equal(
     imageFailureText('タオルの端を合わせる', true),
