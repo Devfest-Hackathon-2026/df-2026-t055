@@ -34,7 +34,9 @@ steps:
         gcloud run services describe web-api --region=${_REGION} --project=${PROJECT_ID} >/dev/null
         gcloud run services describe generator --region=${_REGION} --project=${PROJECT_ID} >/dev/null
         gcloud run services update generator --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/generator:${BUILD_ID} --region=${_REGION} --project=${PROJECT_ID} --quiet
+        gcloud run services update-traffic generator --to-latest --region=${_REGION} --project=${PROJECT_ID} --quiet
         gcloud run services update web-api --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/web-api:${BUILD_ID} --region=${_REGION} --project=${PROJECT_ID} --quiet
+        gcloud run services update-traffic web-api --to-latest --region=${_REGION} --project=${PROJECT_ID} --quiet
 substitutions:
   _REGION: asia-northeast1
   _REPOSITORY: t055
