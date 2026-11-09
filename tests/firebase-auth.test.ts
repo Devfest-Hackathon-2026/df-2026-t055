@@ -1,5 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { Agent } from 'node:https';
+import { initializeApp, deleteApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 import { DemoAuth, MemoryRepository, seed, doc } from '../apps/api/src/adapters.ts';
 import { FirebaseAuth, configuredAuth, type FirebaseTokenClient } from '../apps/api/src/firebase-auth.ts';
 import { createApp } from '../apps/api/src/app.ts';
@@ -10,7 +13,7 @@ const expiry = Math.floor(Date.now() / 1000) + 3600;
 class FakeTokens implements FirebaseTokenClient {
     async verifyIdToken(token: string, checkRevoked: true) {
         assert.equal(checkRevoked, true);
-        if (token === 'invalid') throw Error('PRIVATE_TOKEN');
+        if (token === 'invalid') throw Object.assign(Error('Decoding Firebase ID token failed. PRIVATE_TOKEN'), { code: 'auth/argument-error' });
         return { uid: token, exp: token === 'expired' ? 1 : expiry };
     }
 }
@@ -166,4 +169,65 @@ test('identity endpoint returns only the verified UID and role', async () => {
     assert.equal((await get('invalid')).status, 401);
     const learner = await get('learner-a');
     assert.deepEqual(await learner.json(), { schemaVersion: '1', uid: 'learner-a', role: 'learner' });
+});
+
+
+test('Firebase verification distinguishes rejected credentials from service failures without leaking secrets', async () => {
+    const { db } = setup();
+    const logs: string[] = [];
+    const previous = console.error;
+    console.error = (...args: unknown[]) => { logs.push(args.join(' ')); };
+    try {
+        const cases = [
+            ['auth/id-token-expired', 'expired', 401], ['auth/id-token-revoked', 'revoked', 401],
+            ['auth/user-disabled', 'disabled', 401], ['auth/invalid-id-token', 'bad', 401],
+            ['auth/argument-error', 'Decoding Firebase ID token failed. secret', 401],
+            ['auth/argument-error', 'connection refused PRIVATE_TOKEN', 503],
+            ['auth/invalid-credential', 'PRIVATE_TOKEN', 503], ['auth/insufficient-permission', 'PRIVATE_TOKEN', 503],
+            ['auth/internal-error', 'PRIVATE_TOKEN', 503], ['unknown PRIVATE_TOKEN', 'PRIVATE_TOKEN', 503]
+        ] as const;
+        for (const [code, message, status] of cases) {
+            const auth = new FirebaseAuth(db, { async verifyIdToken(_token, revoked) {
+                assert.equal(revoked, true); throw Object.assign(Error(message), { code });
+            } }, 'demo');
+            const response = await createApp({ db, auth }).app.fetch(new Request('http://localhost/api/v1/tasks', { headers: { authorization: 'Bearer PRIVATE_TOKEN' } }));
+            assert.equal(response.status, status, code);
+            const body = await response.text();
+            assert.doesNotMatch(body, /PRIVATE_TOKEN|connection refused/);
+            assert.equal(JSON.parse(body).error.code, status === 401 ? 'UNAUTHENTICATED' : 'AUTH_SERVICE_UNAVAILABLE');
+        }
+        assert.equal(logs.length, 5);
+        assert.ok(logs.every(line => !line.includes('PRIVATE_TOKEN') && !line.includes('connection refused')));
+        assert.ok(logs.some(line => line.includes('auth/invalid-credential')));
+    } finally { console.error = previous; }
+});
+
+
+test('the installed Firebase Admin SDK rejects a malformed token as unauthenticated', async () => {
+    const { db } = setup();
+    const auth = configuredAuth(db, { AUTH_BACKEND: 'firebase', FIREBASE_PROJECT_ID: 't055-test-project', FIRESTORE_ORG_ID: 'demo' });
+    const response = await createApp({ db, auth }).app.fetch(new Request('http://localhost/api/v1/tasks', { headers: { authorization: 'Bearer not-a-jwt' } }));
+    assert.equal(response.status, 401);
+});
+
+
+test('real Firebase SDK public-key network failure is reported as 503 without leaking details', async () => {
+    class OfflineAgent extends Agent { createConnection(): never { throw Error('PRIVATE_NETWORK_DETAIL'); } }
+    const firebaseApp = initializeApp({ projectId: 't055-offline-test', httpAgent: new OfflineAgent() }, 't055-offline-test');
+    const { db } = setup();
+    const logs: string[] = [];
+    const previous = console.error;
+    console.error = (...args: unknown[]) => { logs.push(args.join(' ')); };
+    try {
+        const part = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url');
+        const time = Math.floor(Date.now() / 1000);
+        const token = `${part({ alg: 'RS256', kid: 'test' })}.${part({ iss: 'https://securetoken.google.com/t055-offline-test', aud: 't055-offline-test', sub: 'private-uid', iat: time, exp: time + 3600, auth_time: time })}.AA`;
+        const auth = new FirebaseAuth(db, getAuth(firebaseApp), 'demo');
+        const response = await createApp({ db, auth }).app.fetch(new Request('http://localhost/api/v1/tasks', { headers: { authorization: `Bearer ${token}` } }));
+        assert.equal(response.status, 503);
+        const body = await response.text();
+        assert.equal(JSON.parse(body).error.code, 'AUTH_SERVICE_UNAVAILABLE');
+        assert.doesNotMatch(body + logs.join(' '), /PRIVATE_NETWORK_DETAIL|private-uid|Bearer/);
+        assert.equal(logs.length, 1);
+    } finally { console.error = previous; await deleteApp(firebaseApp); }
 });

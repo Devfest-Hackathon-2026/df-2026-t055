@@ -9,7 +9,7 @@ import { supportResumeRequestSchema, supportResumeResponseSchema, supportRecordS
 import { draftCorrectionSchema, correctionsListResponseSchema } from '../../../packages/shared/src/generation.ts';
 import { workGuideListResponseSchema, workGuideRecordsResponseSchema } from '../../../packages/shared/src/work-guides.ts';
 import { MemoryRepository, seed, doc, id, now, type Repository, type Storage, type Auth, type Doc } from './adapters.ts';
-import { configuredAuth } from './firebase-auth.ts';
+import { configuredAuth, AuthServiceUnavailableError } from './firebase-auth.ts';
 import { configuredStorage } from './cloud-storage.ts';
 import { configuredRepository } from './firestore-repository.ts';
 import { configuredTts, type TtsAdapter } from './tts.ts';
@@ -17,7 +17,8 @@ import { media } from './media.ts';
 import type { GenerationQueue } from './cloud-tasks.ts';
 import { generationEnabled } from './generation-control.ts';
 import { frozenCorrections } from './correction-input.ts';
-import { guideGenerationRequestSchema, improvementGuideInputSnapshotSchema, initialGuideInputSnapshotSchema, correctionContextInputSnapshotSchema } from '../../../packages/shared/src/generation.ts';
+import { nextCorrectionSequence } from './correction-order.ts';
+import { guideGenerationRequestSchema, improvementGuideInputSnapshotSchema, initialGuideInputSnapshotSchema, correctionContextInputSnapshotSchema, improvementRetryInputSchema } from '../../../packages/shared/src/generation.ts';
 export class HttpError extends Error {
     constructor(public status: number, public code: string) {
         super(code);
@@ -363,7 +364,17 @@ export function createApp(options: {
     api.get('/jobs/:id', async (req, res) => {
         staff(res);
         const j = await get('generationJobs', req.params.id, res);
-        send(res, { status: j.status, draftId: j.draftId, errorCode: j.errorCode });
+        let retryInput: unknown;
+        if (j.kind === 'guide' && j.status === 'failed' && j.inputSnapshot?.sourceReleaseId) {
+            const snapshot = improvementGuideInputSnapshotSchema.parse(j.inputSnapshot);
+            const draft = await get('drafts', j.draftId, res);
+            if (draft.jobId !== j.id || draft.taskId !== j.taskId || draft.learnerId !== snapshot.learnerId ||
+                snapshot.taskId !== j.taskId || draft.sourceReleaseId !== snapshot.sourceReleaseId)
+                fail(409, 'INVALID_IMPROVEMENT_JOB');
+            retryInput = improvementRetryInputSchema.parse({ learnerId: snapshot.learnerId,
+                sourceReleaseId: snapshot.sourceReleaseId, supportInputs: snapshot.supportInputs });
+        }
+        send(res, { status: j.status, draftId: j.draftId, errorCode: j.errorCode, ...(retryInput ? { retryInput } : {}) });
     });
     api.get('/drafts/:id', async (req, res) => {
         staff(res);
@@ -446,7 +457,8 @@ export function createApp(options: {
             });
             let contextJobId: string | undefined;
             if (changes.length) {
-                const correction = doc(member(res).orgId, { taskId: d.taskId, learnerId: d.learnerId, draftId: d.id,
+                const correctionSequence = await nextCorrectionSequence(db, d.orgId, d.learnerId, d.taskId);
+                const correction = doc(member(res).orgId, { correctionSequence, taskId: d.taskId, learnerId: d.learnerId, draftId: d.id,
                     draftRevision: d.revision + 1, changes, ...(correctionReason !== undefined ? { reason: correctionReason } : {}), createdBy: member(res).uid });
                 const eligible = changes.filter(c => ['text', 'imageAltText', 'visibleCaution'].includes(c.field));
                 if (eligible.length && await generationEnabled(db)) {
@@ -464,7 +476,7 @@ export function createApp(options: {
                         }
                     }
                 }
-                const { id: correctionId, orgId: _orgId, ...details } = correction;
+                const { id: correctionId, orgId: _orgId, correctionSequence: _sequence, ...details } = correction;
                 draftCorrectionSchema.parse({ ...details, schemaVersion: '1', correctionId });
                 await db.put('draftCorrections', correction);
             }
@@ -480,7 +492,7 @@ export function createApp(options: {
         await get('tasks', req.params.taskId, res);
         const entries = (await list('draftCorrections', res)).filter(c => c.learnerId === req.params.learnerId && c.taskId === req.params.taskId);
         const jobs = await list('generationJobs', res);
-        const corrections = entries.map(({ id, orgId, ...entry }) => {
+        const corrections = entries.map(({ id, orgId, correctionSequence, ...entry }) => {
             const job = jobs.find(j => j.id === entry.contextJobId && j.kind === 'correction_context');
             return { ...entry, schemaVersion: '1', correctionId: id, ...(job ? { contextJobStatus: job.status } : {}) };
         }).sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.correctionId.localeCompare(b.correctionId));
@@ -953,8 +965,8 @@ export function createApp(options: {
         send(res, { status: 'processed' });
     });
     app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-        const status = err instanceof HttpError ? err.status : typeof err.status === 'number' ? err.status : err instanceof z.ZodError || err.type === 'entity.parse.failed' ? 422 : 500;
-        res.status(status).json({ error: { code: status === 500 ? 'INTERNAL_ERROR' : err.code ?? 'INVALID_INPUT', message: status === 500 ? '処理に失敗しました' : '操作を確認してください', requestId: res.locals.requestId } });
+        const status = err instanceof AuthServiceUnavailableError ? 503 : err instanceof HttpError ? err.status : typeof err.status === 'number' ? err.status : err instanceof z.ZodError || err.type === 'entity.parse.failed' ? 422 : 500;
+        res.status(status).json({ error: { code: err instanceof AuthServiceUnavailableError ? 'AUTH_SERVICE_UNAVAILABLE' : status === 500 ? 'INTERNAL_ERROR' : err.code ?? 'INVALID_INPUT', message: err instanceof AuthServiceUnavailableError ? '認証サービスを利用できません。時間をおいて再度お試しください' : status === 500 ? '処理に失敗しました' : '操作を確認してください', requestId: res.locals.requestId } });
     });
     return {
         app, db, storage, limit

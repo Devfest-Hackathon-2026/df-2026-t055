@@ -198,7 +198,7 @@ Cloud Storageは`source/{orgId}/{taskId}/...`、`draft/{orgId}/{draftId}/...`、
 
 ### 共通契約
 
-ベースは`/api/v1`、JSONはcamelCase、`schemaVersion: "1"`。Firebase AuthenticationのIDトークンをBearerで送り、APIで検証してmembersのroleを取得する。本人アカウントはlearnerIdにひも付ける。URLのIDを変えたアクセスも権限検査する。401は認証失敗、403は権限不足、404は対象なし、409は状態・revision競合、422は入力不正。エラー形は`{error:{code,message,requestId}}`とし、内部例外や生成原文を返さない。
+ベースは`/api/v1`、JSONはcamelCase、`schemaVersion: "1"`。Firebase AuthenticationのIDトークンをBearerで送り、APIで検証してmembersのroleを取得する。本人アカウントはlearnerIdにひも付ける。URLのIDを変えたアクセスも権限検査する。401は認証失敗、403は権限不足、404は対象なし、409は状態・revision競合、422は入力不正、503 `AUTH_SERVICE_UNAVAILABLE` は認証サービスの障害や検証不能。エラー形は`{error:{code,message,requestId}}`とし、内部例外や生成原文を返さない。
 
 | メソッド・パス | 利用者 | 入力 → 出力・処理 |
 | --- | --- | --- |
@@ -210,7 +210,7 @@ Cloud Storageは`source/{orgId}/{taskId}/...`、`draft/{orgId}/{draftId}/...`、
 | `GET /learners/{id}/work-guides` / `GET /learners/{id}/work-guides/{taskId}/support-records` | 職員 | 作業別の次回版・未反映件数・生成／確認状態と、対象の本人・作業の支援記録。前者は `{schemaVersion,items:[{taskId,title,assignment,unappliedCount,latestDraft,latestGeneration}]}` を返す。未存在の割当・下書き・生成は `null`。後者は `{schemaVersion,records}` を返し、各記録の `applied` は割当版とその継承元が採用した同一ID・revisionに限りtrueとする。継承元が欠落・循環・別対象の場合は409を返す |
 | `GET /learners/{id}/work-guides/{taskId}/corrections` | 職員 | 同じ所属の対象本人・作業の修正履歴、参考メモ、要約ジョブの状態。保存済みの修正とAIの提案を分けて返す |
 | `POST /tasks/{id}/generations` | 職員 | `{learnerId}` → 202 `{jobId,draftId}`。記録からの改善では `sourceReleaseId, supportInputs:[{recordId, revision, summary}], clientRequestId` も送る。新規生成・改善を合わせて1作業あたり手順下書きの生成試行10回まで |
-| `GET /jobs/{id}` | 職員 | `{kind,status,draftId,errorCode?}`。画面は3秒間隔で取得。下書きの生成状態にはguideのジョブを使う |
+| `GET /jobs/{id}` | 職員 | `{kind,status,draftId,errorCode?}`。画面は3秒間隔で取得。下書きの生成状態にはguideのジョブを使う。失敗した改善ジョブには、再試行用に受付時の本人・元版・確認済み要約と記録版を `retryInput` として返す |
 | `GET /drafts/{id}` | 職員 | AI原文と編集データを別オブジェクトで返す |
 | `PATCH /drafts/{id}` | 職員 | `{expectedRevision,editedSteps,reviewChecks,displayMode?,audioGuidance?,appliedSupportRecordRefs?,correctionReason?}` → `{revision,reviewChecks}`。内容を変更した場合は第2節の規則で確認チェックを外し、保存後のチェック状態を返す。編集内容の差分があれば修正履歴も保存し、参考メモの生成を非同期で受け付ける。確認チェックだけの変更や、競合で保存できなかった修正からは履歴を作らない |
 | `POST /drafts/{id}/frames` | 職員 | `{frameMs}` → `{imageAssetId}`。サーバーのffmpegで原動画から静止画を切り出す |
