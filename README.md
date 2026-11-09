@@ -1,4 +1,4 @@
-# DevFest Hackathon 2026 提出用リポジトリ
+# しごでき — DevFest Hackathon 2026 提出用リポジトリ
 
 > **現在のプロダクト仕様**は [docs/PRODUCT_SPEC.md](docs/PRODUCT_SPEC.md) です。過去の設計書・企画案・調査資料は [アーカイブ](docs/archive/README.md) にまとめています。AIエージェントは [AGENTS.md](AGENTS.md) から読み始めてください。
 
