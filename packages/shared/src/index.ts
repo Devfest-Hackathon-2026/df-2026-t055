@@ -205,3 +205,4 @@ export function projectReleaseToSessionSteps(release: Release) {
 }
 
 export * from './learner-profile.ts';
+export * from './support.ts';
