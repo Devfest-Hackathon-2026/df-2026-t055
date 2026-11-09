@@ -22,6 +22,7 @@ source = source.slice(source.indexOf('function Learner(')).replace(/\ncreateRoot
 source = `import React, {useState,useEffect,useRef} from ${JSON.stringify(hookUrl)};
 import {hold, readSafety, flushSafety, safetyKey, clearWaiting} from ${JSON.stringify(new URL('../apps/web/src/safety.ts', import.meta.url).href)};
 import {learnerSupportNotificationSchema} from ${JSON.stringify(new URL('../packages/shared/src/support.ts', import.meta.url).href)};
+import {learnerStepPresentation} from ${JSON.stringify(new URL('../apps/web/src/learner-display.ts', import.meta.url).href)};
 let account = 'learner-a';
 const api=(...args)=>globalThis.learnerApi(...args); const go=()=>{}; const Asset=()=>null;
 const subscribeSupport=()=>()=>{};
