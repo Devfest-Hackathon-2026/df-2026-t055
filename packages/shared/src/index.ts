@@ -203,3 +203,5 @@ export function projectReleaseToSessionSteps(release: Release) {
             : photoTextSessionStepSchema.parse({ ...photo, text: s.text, visibleCaution: s.visibleCaution });
     });
 }
+
+export * from './learner-profile.ts';
