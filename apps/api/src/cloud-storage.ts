@@ -1,4 +1,5 @@
 import { LocalStorage, type Storage } from './adapters.ts';
+import { GoogleStorageClient } from './google-storage.ts';
 
 // The binding must enforce these conditions atomically on Cloud Storage requests.
 // No ACL, signed URL or public URL operations are exposed by this port.
@@ -44,7 +45,7 @@ export function configuredStorage(env: NodeJS.ProcessEnv = process.env, client?:
     const backend = env.STORAGE_BACKEND ?? 'local';
     if (backend === 'local') return new LocalStorage();
     if (backend !== 'cloud') throw Error('INVALID_STORAGE_BACKEND');
-    if (!client) throw Error('CLOUD_STORAGE_CLIENT_NOT_CONFIGURED: SDK binding is not installed; inject a CloudStorageClient');
+    if (!client && !env.GOOGLE_CLOUD_PROJECT) throw Error('CLOUD_STORAGE_CLIENT_NOT_CONFIGURED: GOOGLE_CLOUD_PROJECT is required');
     if (!env.STORAGE_BUCKET) throw Error('STORAGE_BUCKET_REQUIRED');
-    return new CloudStorage(client, env.STORAGE_BUCKET);
+    return new CloudStorage(client ?? new GoogleStorageClient(env.GOOGLE_CLOUD_PROJECT!), env.STORAGE_BUCKET);
 }
