@@ -1,5 +1,7 @@
 // 共有契約の集約点。分野別の契約を専用ファイルへ分けるときは、ここから再exportして既存の参照を保つ。競合時は両側の追加を残す。
 import { z } from 'zod';
+import { generationRequestSchema } from './generation.ts';
+export * from './generation.ts';
 export const schemaVersion = '1' as const;
 const time = z.number().int().nonnegative();
 const candidate = z.string().max(200);
@@ -56,7 +58,6 @@ export type LearnerSessionDTO = {
 export const transitions = {
     queued: ['running'], running: ['succeeded', 'failed'], active: ['waiting_help', 'stopped', 'completed'], waiting_help: ['active', 'stopped'], stopped: [], completed: ['stopped']
 } as const;
-export const generationRequestSchema = z.object({ learnerId: z.string().min(1) }).strict();
 export const approvalRequestSchema = z.object({ expectedRevision: z.number().int().nonnegative(), approvalRequestId: z.string().min(1).max(100) }).strict();
 export const displayModeSchema = z.enum(['photo_only', 'photo_text']);
 export type DisplayMode = z.infer<typeof displayModeSchema>;
