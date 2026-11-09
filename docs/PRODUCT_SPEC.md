@@ -205,7 +205,7 @@ Cloud Storageは`source/{orgId}/{taskId}/...`、`draft/{orgId}/{draftId}/...`、
 | `GET /tasks` / `GET /tasks/{id}` | 職員 | 一覧／作業メタデータ |
 | `GET /learners` / `GET /learners/{id}` | 職員 | 同じ所属のプロフィールの一覧／詳細。障害に関する任意項目は詳細でのみ返す |
 | `POST /learners` / `PATCH /learners/{id}` | 職員 | 表示名、本人の希望、提示設定、確認済みの配慮、任意の記録を登録／更新。更新は `expectedRevision` を検査し、`disabilityInfo: null` で任意項目を消せる。登録は認証アカウントの作成と分ける |
-| `GET /learners/{id}/work-guides` / `GET /learners/{id}/work-guides/{taskId}/support-records` | 職員 | 作業別の次回版・未反映件数・生成／確認状態と、対象の本人・作業の支援記録 |
+| `GET /learners/{id}/work-guides` / `GET /learners/{id}/work-guides/{taskId}/support-records` | 職員 | 作業別の次回版・未反映件数・生成／確認状態と、対象の本人・作業の支援記録。前者は `{schemaVersion,items:[{taskId,title,assignment,unappliedCount,latestDraft,latestGeneration}]}` を返す。未存在の割当・下書き・生成は `null`。後者は `{schemaVersion,records}` を返し、各記録の `applied` は割当版とその継承元が採用した同一ID・revisionに限りtrueとする。継承元が欠落・循環・別対象の場合は409を返す |
 | `GET /learners/{id}/work-guides/{taskId}/corrections` | 職員 | 同じ所属の対象本人・作業の修正履歴、参考メモ、要約ジョブの状態。保存済みの修正とAIの提案を分けて返す |
 | `POST /tasks/{id}/generations` | 職員 | `{learnerId}` → 202 `{jobId,draftId}`。記録からの改善では `sourceReleaseId, supportInputs:[{recordId, revision, summary}], clientRequestId` も送る。新規生成・改善を合わせて1作業あたり手順下書きの生成試行10回まで |
 | `GET /jobs/{id}` | 職員 | `{kind,status,draftId,errorCode?}`。画面は3秒間隔で取得。下書きの生成状態にはguideのジョブを使う |
