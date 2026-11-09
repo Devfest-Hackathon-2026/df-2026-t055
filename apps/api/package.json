@@ -1,0 +1,8 @@
+{
+  "name": "@t055/api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --experimental-transform-types --watch src/server.ts"
+  }
+}

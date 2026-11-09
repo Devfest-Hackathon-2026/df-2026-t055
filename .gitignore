@@ -32,3 +32,6 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 *.log
+
+# ローカルMVPの非公開資産
+.local/
