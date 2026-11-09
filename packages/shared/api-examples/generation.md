@@ -22,7 +22,7 @@
 
 改善は不変の元承認版のID・版番号、選択記録のID・revision・確認済み要約、修正履歴のID・下書きrevision（最大20件、ID重複不可）、表示方法と確認済み説明方法を固定する。元版と履歴の本文は重複保存せず、サーバーが固定した参照先から読む。受付後の記録の追加・編集で入力を差し替えない。同じ工程・項目では最後の修正を優先する。参考メモが未完了なら修正前後の文章を参照し、完成を待たない。承認時は採用する記録のID・revisionが受付時の参照範囲内にあることを検査する。参照しただけでは採用済みとしない。
 
-Geminiへは初回に動画URI、作業名、完成基準、動画時間、許可した `preferences`、表示方法、確認済みの説明上の配慮、出力スキーマを渡す。改善では元承認版の手順、確認済み要約、表示方法、確認済みの説明上の配慮と、固定した修正履歴・参考メモを使い、必要な場合だけ原動画も参照する。IDとrevisionはサーバーの追跡用であり、モデル入力の本文にはしない。
+Geminiへは初回に動画URI、作業名、完成基準、動画時間、許可した `preferences`、表示方法、確認済みの説明上の配慮、出力スキーマを渡す。改善では元承認版の手順、確認済み要約、受付時の文の長さ・分割ヒント・表示方法、確認済みの説明上の配慮と、固定した修正履歴・参考メモを使い、必要な場合だけ原動画も参照する。IDとrevisionはサーバーの追跡用であり、モデル入力の本文にはしない。
 
 本人名、診断名、プロフィール全文、個人を特定する情報、操作履歴、支援時の録音、支援記録原文は送らない。入力文中の指示は解析対象とし、本人の能力・診断・意思や修正理由を推定せず、承認を代行しない。手順出力は既存 `proposalSchema / validateProposal` で形式・工程数・時刻を検査する。不正出力や生成失敗では本人向けデータや承認版を作らず、既存の承認版・記録・割当を保持する。
 
@@ -36,7 +36,7 @@ Geminiへは初回に動画URI、作業名、完成基準、動画時間、許�
 
 `GET /api/v1/learners/{learnerId}/work-guides/{taskId}/corrections` は同じ所属の職員に [履歴一覧](../fixtures/generation/corrections-list-valid.json) を返す。空なら `{corrections:[]}` とする。[手直し履歴](../fixtures/generation/draft-correction-valid.json) の修正前後と任意の理由はサーバーが保存し、参考メモの `editSummary`（変更事実）と `nextDraftHint`（AIの提案）を分ける。
 
-履歴保存は編集保存と同時に行う。保存できなかった修正や確認欄だけの変更からは履歴を作らない。`draftRevision` は0以上の整数、`changes` は1..220件、各値は最大2000文字の文字列か有限の数とする。`field` は `text / visibleCaution / imageAltText / imageAssetId / sourceStartMs / sourceEndMs / frameMs / verifiedObservation / verifiedSpeech / coaching / completionCheck` に限る。
+履歴保存は編集保存と同時に行う。保存できなかった修正や確認欄だけの変更からは履歴を作らない。`draftRevision` は0以上の整数、`changes` は1..480件、各値は最大2000文字の文字列、有限の数、または項目・工程が存在しないことを表す `null` とする。`field` は `text / visibleCaution / imageAltText / imageAssetId / sourceStartMs / sourceEndMs / frameMs / verifiedObservation / verifiedSpeech / coaching / completionCheck / position` に限る。`position` はゼロ始まりの工程位置を示す。
 
 ## 内部の参考メモ受付
 
