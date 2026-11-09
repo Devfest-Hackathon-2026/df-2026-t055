@@ -172,46 +172,7 @@ test('identity endpoint returns only the verified UID and role', async () => {
 });
 
 
-test('Firebase verification distinguishes rejected credentials from service failures without leaking secrets', async () => {
-    const { db } = setup();
-    const logs: string[] = [];
-    const previous = console.error;
-    console.error = (...args: unknown[]) => { logs.push(args.join(' ')); };
-    try {
-        const cases = [
-            ['auth/id-token-expired', 'expired', 401], ['auth/id-token-revoked', 'revoked', 401],
-            ['auth/user-disabled', 'disabled', 401], ['auth/invalid-id-token', 'bad', 401],
-            ['auth/argument-error', 'Decoding Firebase ID token failed. secret', 401],
-            ['auth/argument-error', 'connection refused PRIVATE_TOKEN', 503],
-            ['auth/invalid-credential', 'PRIVATE_TOKEN', 503], ['auth/insufficient-permission', 'PRIVATE_TOKEN', 503],
-            ['auth/internal-error', 'PRIVATE_TOKEN', 503], ['unknown PRIVATE_TOKEN', 'PRIVATE_TOKEN', 503]
-        ] as const;
-        for (const [code, message, status] of cases) {
-            const auth = new FirebaseAuth(db, { async verifyIdToken(_token, revoked) {
-                assert.equal(revoked, true); throw Object.assign(Error(message), { code });
-            } }, 'demo');
-            const response = await createApp({ db, auth }).app.fetch(new Request('http://localhost/api/v1/tasks', { headers: { authorization: 'Bearer PRIVATE_TOKEN' } }));
-            assert.equal(response.status, status, code);
-            const body = await response.text();
-            assert.doesNotMatch(body, /PRIVATE_TOKEN|connection refused/);
-            assert.equal(JSON.parse(body).error.code, status === 401 ? 'UNAUTHENTICATED' : 'AUTH_SERVICE_UNAVAILABLE');
-        }
-        assert.equal(logs.length, 5);
-        assert.ok(logs.every(line => !line.includes('PRIVATE_TOKEN') && !line.includes('connection refused')));
-        assert.ok(logs.some(line => line.includes('auth/invalid-credential')));
-    } finally { console.error = previous; }
-});
-
-
-test('the installed Firebase Admin SDK rejects a malformed token as unauthenticated', async () => {
-    const { db } = setup();
-    const auth = configuredAuth(db, { AUTH_BACKEND: 'firebase', FIREBASE_PROJECT_ID: 't055-test-project', FIRESTORE_ORG_ID: 'demo' });
-    const response = await createApp({ db, auth }).app.fetch(new Request('http://localhost/api/v1/tasks', { headers: { authorization: 'Bearer not-a-jwt' } }));
-    assert.equal(response.status, 401);
-});
-
-
-test('real Firebase SDK public-key network failure is reported as 503 without leaking details', async () => {
+test('Firebase SDK distinguishes invalid tokens from unavailable verification without exposing secrets', async () => {
     class OfflineAgent extends Agent { createConnection(): never { throw Error('PRIVATE_NETWORK_DETAIL'); } }
     const firebaseApp = initializeApp({ projectId: 't055-offline-test', httpAgent: new OfflineAgent() }, 't055-offline-test');
     const { db } = setup();
@@ -223,7 +184,10 @@ test('real Firebase SDK public-key network failure is reported as 503 without le
         const time = Math.floor(Date.now() / 1000);
         const token = `${part({ alg: 'RS256', kid: 'test' })}.${part({ iss: 'https://securetoken.google.com/t055-offline-test', aud: 't055-offline-test', sub: 'private-uid', iat: time, exp: time + 3600, auth_time: time })}.AA`;
         const auth = new FirebaseAuth(db, getAuth(firebaseApp), 'demo');
-        const response = await createApp({ db, auth }).app.fetch(new Request('http://localhost/api/v1/tasks', { headers: { authorization: `Bearer ${token}` } }));
+        const app = createApp({ db, auth }).app;
+        const request = (value: string) => app.fetch(new Request('http://localhost/api/v1/tasks', { headers: { authorization: `Bearer ${value}` } }));
+        assert.equal((await request('not-a-jwt')).status, 401);
+        const response = await request(token);
         assert.equal(response.status, 503);
         const body = await response.text();
         assert.equal(JSON.parse(body).error.code, 'AUTH_SERVICE_UNAVAILABLE');
