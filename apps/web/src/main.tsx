@@ -37,7 +37,10 @@ import {
   clearWaiting,
   readStart,
   saveStart,
+  clearStart,
   startKey,
+  storageFailed,
+  safetyKeys,
 } from './safety.ts';
 import './style.css';
 const accounts = [
@@ -1297,6 +1300,10 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
   const key = sessionId ? safetyKey(uid, sessionId) : '';
   const safety = readSafety(localStorage, key);
   const savedStart = readStart(localStorage, uid);
+  const storageError =
+    storageFailed(localStorage, key) || storageFailed(localStorage, startKey(uid));
+  const storageMessage =
+    '端末の記録を使えません。画面を閉じると送信をやり直せません。近くの職員をよんでください。';
   useEffect(() => {
     setSession(undefined);
     void action(async () => {
@@ -1311,9 +1318,7 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
       if (running) return;
       running = true;
       try {
-        const keys = Array.from({ length: localStorage.length }, (_, i) =>
-          localStorage.key(i),
-        ).filter((k): k is string => !!k && k.startsWith(`safety:${uid}:`));
+        const keys = safetyKeys(localStorage, uid);
         for (const pendingKey of keys) {
           if (!active || account !== uid) return;
           if (!readSafety(localStorage, pendingKey).pending.length) continue;
@@ -1365,7 +1370,7 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
           ...current.safety,
           expectedRevision: s.revision,
         });
-        localStorage.removeItem(startKey(uid));
+        clearStart(localStorage, uid);
         if (active) {
           setHomeHalted(true);
           setMessage(
@@ -1478,18 +1483,18 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
   const requestSafety = (type: 'help' | 'stop') => {
     if (!sessionId) {
       if (pendingHomeSafety.current !== 'stop') pendingHomeSafety.current = type;
+      setHomeHalted(true);
       const start = readStart(localStorage, uid);
       if (start && start.safety?.type !== 'stop') {
         saveStart(localStorage, uid, {
           ...start,
           safety: { type: pendingHomeSafety.current, clientEventId: crypto.randomUUID() },
         });
-        setSafetyTick((x) => x + 1);
       }
-      setHomeHalted(true);
       setMessage(
         pendingHomeSafety.current === 'stop' ? '作業をやめました' : '近くの職員をよんでください',
       );
+      setSafetyTick((x) => x + 1);
       return;
     }
     hold(localStorage, key, {
@@ -1501,7 +1506,7 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
     setSafetyTick((x) => x + 1);
   };
   const event = async (type: string) => {
-    if (readSafety(localStorage, key).stopped) return;
+    if (readSafety(localStorage, key).stopped || storageError) return;
     setBusy(true);
     try {
       await api(`/me/sessions/${sessionId}/events`, 'POST', {
@@ -1509,8 +1514,10 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
         expectedRevision: session!.revision,
         type,
       });
+      if (readSafety(localStorage, key).stopped || storageFailed(localStorage, key)) return;
       if (type === 'resume') clearWaiting(localStorage, key);
       const s = await api(`/me/sessions/${sessionId}`);
+      if (readSafety(localStorage, key).stopped || storageFailed(localStorage, key)) return;
       setSession(s);
     } finally {
       setBusy(false);
@@ -1523,15 +1530,19 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
       {!sessionId ? (
         <>
           <h1>
-            {savedStart?.safety
-              ? savedStart.safety.type === 'stop'
-                ? '作業をやめました'
-                : '近くの職員をよんでください'
-              : homeHalted
-                ? message
-                : 'きょうの さぎょう'}
+            {storageError
+              ? '作業をやめました'
+              : savedStart?.safety
+                ? savedStart.safety.type === 'stop'
+                  ? '作業をやめました'
+                  : '近くの職員をよんでください'
+                : homeHalted
+                  ? message
+                  : 'きょうの さぎょう'}
           </h1>
+          {storageError && <p role='status'>{storageMessage}</p>}
           {!homeHalted &&
+            !storageError &&
             !savedStart?.safety &&
             (assignments.length ? (
               assignments.map((a) => (
@@ -1546,6 +1557,7 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
                         try {
                           const start = { taskId: a.taskId, clientRequestId: crypto.randomUUID() };
                           saveStart(localStorage, uid, start);
+                          if (storageFailed(localStorage, startKey(uid))) return;
                           const s = await api('/me/sessions', 'POST', start);
                           const saved = readStart(localStorage, uid);
                           if (saved?.clientRequestId !== start.clientRequestId) return;
@@ -1555,11 +1567,17 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
                               ...saved.safety,
                               expectedRevision: s.revision,
                             });
-                            localStorage.removeItem(startKey(uid));
+                            clearStart(localStorage, uid);
                             setSafetyTick((x) => x + 1);
                             return;
                           }
-                          localStorage.removeItem(startKey(uid));
+                          if (
+                            pendingHomeSafety.current ||
+                            storageFailed(localStorage, startKey(uid))
+                          )
+                            return;
+                          clearStart(localStorage, uid);
+                          if (storageFailed(localStorage, startKey(uid))) return;
                           go(`/me/sessions/${s.sessionId}`);
                         } finally {
                           setBusy(false);
@@ -1575,11 +1593,11 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
               <p>職員をよんでください</p>
             ))}
         </>
-      ) : safety.stopped || session?.status === 'stopped' ? (
+      ) : safety.stopped || storageError || session?.status === 'stopped' ? (
         <section>
           <h1>作業をやめました</h1>
           <p>職員と そうだんしてください</p>
-          <p role='status'>{message}</p>
+          <p role='status'>{storageError ? storageMessage : message}</p>
         </section>
       ) : safety.waiting || session?.status === 'waiting_help' ? (
         <section>
@@ -1599,7 +1617,10 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
                 });
                 if (readSafety(localStorage, key).stopped) return;
                 clearWaiting(localStorage, key);
-                setSession(await api(`/me/sessions/${sessionId}`));
+                const updated = await api(`/me/sessions/${sessionId}`);
+                if (readSafety(localStorage, key).stopped || storageFailed(localStorage, key))
+                  return;
+                setSession(updated);
               })
             }
           >
@@ -1649,7 +1670,7 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
         <button
           className='help'
           onClick={() => requestSafety('help')}
-          disabled={safety.stopped || session?.status === 'stopped'}
+          disabled={safety.stopped || storageError || session?.status === 'stopped'}
         >
           {learnerControlContent('手伝って')}
         </button>

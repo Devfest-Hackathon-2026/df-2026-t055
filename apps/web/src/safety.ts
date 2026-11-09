@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 export interface Store {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
@@ -13,6 +15,67 @@ export type SafetyState = {
   waiting: boolean;
   pending: SafetyEvent[];
 };
+const safetyEventSchema = z.object({
+  clientEventId: z.string().min(1),
+  expectedRevision: z.number().int().nonnegative(),
+  type: z.enum(['stop', 'help']),
+});
+const safetySchema = z.object({
+  stopped: z.boolean(),
+  waiting: z.boolean(),
+  pending: z.array(safetyEventSchema),
+});
+const startSchema = z.object({
+  taskId: z.string().min(1),
+  clientRequestId: z.string().min(1),
+  safety: safetyEventSchema.omit({ expectedRevision: true }).optional(),
+});
+// Keep intent in this page even when browser storage cannot be read or written.
+const memory = new WeakMap<Store, Map<string, string | null>>();
+const failures = new WeakMap<Store, Set<string>>();
+function remember(store: Store, key: string, value: string | null) {
+  if (!memory.has(store)) memory.set(store, new Map());
+  memory.get(store)!.set(key, value);
+}
+function failed(store: Store, key: string) {
+  if (!failures.has(store)) failures.set(store, new Set());
+  failures.get(store)!.add(key);
+}
+export function storageFailed(store: Store, key: string) {
+  return failures.get(store)?.has(key) ?? false;
+}
+function readStored(store: Store, key: string) {
+  if (storageFailed(store, key)) return memory.get(store)?.get(key) ?? null;
+  try {
+    const value = store.getItem(key);
+    remember(store, key, value);
+    return value;
+  } catch {
+    failed(store, key);
+    return memory.get(store)?.get(key) ?? null;
+  }
+}
+function writeStored(store: Store, key: string, value: string | null) {
+  remember(store, key, value);
+  try {
+    if (value === null) store.removeItem(key);
+    else store.setItem(key, value);
+  } catch {
+    failed(store, key);
+  }
+}
+export function safetyKeys(store: Storage, uid: string) {
+  const keys = new Set(memory.get(store)?.keys());
+  try {
+    for (let i = 0; i < store.length; i++) {
+      const key = store.key(i);
+      if (key) keys.add(key);
+    }
+  } catch {
+    failed(store, startKey(uid));
+  }
+  return [...keys].filter((key) => key.startsWith(`safety:${uid}:`));
+}
 export function safetyKey(uid: string, sessionId: string) {
   return `safety:${uid}:${sessionId}`;
 }
@@ -25,15 +88,29 @@ export function startKey(uid: string) {
   return `pending-start:${uid}`;
 }
 export function readStart(store: Store, uid: string): PendingStart | null {
-  const value = store.getItem(startKey(uid));
-  return value ? JSON.parse(value) : null;
+  const key = startKey(uid);
+  const value = readStored(store, key);
+  try {
+    return value === null ? null : startSchema.parse(JSON.parse(value));
+  } catch {
+    failed(store, key);
+    return null;
+  }
 }
 export function saveStart(store: Store, uid: string, start: PendingStart) {
-  store.setItem(startKey(uid), JSON.stringify(start));
+  writeStored(store, startKey(uid), JSON.stringify(start));
+}
+export function clearStart(store: Store, uid: string) {
+  writeStored(store, startKey(uid), null);
 }
 export function readSafety(store: Store, key: string): SafetyState {
-  const value = store.getItem(key);
-  return value ? JSON.parse(value) : { stopped: false, waiting: false, pending: [] };
+  const value = readStored(store, key);
+  try {
+    if (value !== null) return safetySchema.parse(JSON.parse(value));
+  } catch {
+    failed(store, key);
+  }
+  return { stopped: false, waiting: false, pending: [] };
 }
 // Persist before issuing a network request; stopped is retained after acknowledgement.
 export function hold(store: Store, key: string, event: SafetyEvent) {
@@ -43,20 +120,20 @@ export function hold(store: Store, key: string, event: SafetyEvent) {
   if (event.type === 'stop') s.stopped = true;
   else s.waiting = true;
   s.pending.push(event);
-  store.setItem(key, JSON.stringify(s));
+  writeStored(store, key, JSON.stringify(s));
   return s;
 }
 export function delivered(store: Store, key: string, eventId: string) {
   const s = readSafety(store, key);
   s.pending = s.pending.filter((e) => e.clientEventId !== eventId);
-  store.setItem(key, JSON.stringify(s));
+  writeStored(store, key, JSON.stringify(s));
   return s;
 }
 export function clearWaiting(store: Store, key: string) {
   const s = readSafety(store, key);
-  if (s.stopped) return;
+  if (s.stopped || storageFailed(store, key)) return;
   s.waiting = false;
-  store.setItem(key, JSON.stringify(s));
+  writeStored(store, key, JSON.stringify(s));
 }
 export type SafetyTransport = {
   send: (event: SafetyEvent) => Promise<void>;
@@ -99,7 +176,7 @@ export async function flushSafety(
           if (fresh.status === 'stopped') {
             const s = readSafety(store, key);
             s.stopped = true;
-            store.setItem(key, JSON.stringify(s));
+            writeStored(store, key, JSON.stringify(s));
             delivered(store, key, event.clientEventId);
             continue;
           }
@@ -110,7 +187,7 @@ export async function flushSafety(
             s.pending = s.pending.map((e) =>
               e.clientEventId === event.clientEventId ? updated : e,
             );
-            store.setItem(key, JSON.stringify(s));
+            writeStored(store, key, JSON.stringify(s));
             await transport.send(updated);
             delivered(store, key, event.clientEventId);
             continue;
