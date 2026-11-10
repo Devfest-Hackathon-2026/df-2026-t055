@@ -1338,7 +1338,8 @@ export function createApp(
         receivedAt: now(),
       });
       await db.put('sessionEvents', e);
-      if (['stop', 'help'].includes(input.type)) {
+      // complete も stop と同じ形の要求を作り、コミット後の通知で職員へ完了を知らせる。
+      if (['stop', 'help', 'complete'].includes(input.type)) {
         const q = doc(s.orgId, {
           sessionId: s.id,
           eventId: e.id,
@@ -1490,7 +1491,8 @@ export function createApp(
         });
       if (
         !(q.kind === 'help' && q.status === 'in_progress') &&
-        !(q.kind === 'stop' && q.status === 'open')
+        !(q.kind === 'stop' && q.status === 'open') &&
+        !(q.kind === 'complete' && q.status === 'open')
       )
         fail(409, 'INVALID_STATE');
       if (q.kind === 'help' && q.assignedTo !== member(res).uid) fail(403, 'NOT_ASSIGNED');

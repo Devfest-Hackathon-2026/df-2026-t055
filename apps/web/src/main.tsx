@@ -1852,7 +1852,7 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
           </div>
           <div className='next-card'>
             <p className='next-label'>つぎは</p>
-            <p className='next-text'>{rubyText('職員をよんでください')}</p>
+            <p className='next-text'>{rubyText('職員に しらせました')}</p>
             <button className='primary' onClick={() => go('/me')}>
               {learnerControlContent('おわります')}
             </button>

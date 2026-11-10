@@ -299,6 +299,59 @@ test(
 );
 
 test(
+  'WebSocket: 本人の完了を記録すると同じ所属の職員へcompleteの要求を通知する',
+  { timeout: 10000 },
+  async (t) => {
+    const h = await harness(t);
+    h.db.put(
+      'releases',
+      doc('demo', { id: 'r-c', learnerId: 'a', learnerSteps: [{ stepId: 'z' }] }),
+    );
+    h.db.put(
+      'sessions',
+      doc('demo', {
+        id: 's-c',
+        learnerId: 'a',
+        releaseId: 'r-c',
+        status: 'active',
+        stepIndex: 0,
+        revision: 0,
+      }),
+    );
+    const staff = await h.open();
+    staff.auth('staff');
+    const initial = staffSupportNotificationSchema.parse(await staff.next());
+    assert.ok(initial.type === 'support.snapshot');
+    assert.ok(!initial.requests.some((q) => q.kind === 'complete'));
+    const other = await h.open();
+    other.auth('other-staff');
+    await other.next();
+    const response = await h.post(
+      '/me/sessions/s-c/events',
+      { clientEventId: 'done', expectedRevision: 0, type: 'complete' },
+      'learner-a',
+    );
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).status, 'completed');
+    const update = staffSupportNotificationSchema.parse(await staff.next());
+    assert.ok(update.type === 'support.snapshot');
+    const completion = update.requests.filter((q) => q.kind === 'complete');
+    assert.equal(completion.length, 1);
+    assert.deepEqual(
+      [
+        completion[0].sessionId,
+        completion[0].learnerId,
+        completion[0].stepId,
+        completion[0].status,
+      ],
+      ['s-c', 'a', 'z', 'open'],
+    );
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assert.deepEqual(other.queue, []);
+  },
+);
+
+test(
   'WebSocket: 分割authを受け、二回目のメッセージと不正JSONを拒否',
   { timeout: 10000 },
   async (t) => {

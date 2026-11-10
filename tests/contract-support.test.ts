@@ -18,6 +18,8 @@ const requests = [
   'help-acknowledged',
   'stop-open',
   'stop-acknowledged',
+  'complete-open',
+  'complete-acknowledged',
 ];
 const valid: Record<string, z.ZodType> = {
   ...Object.fromEntries(requests.map((s) => [`request-${s}`, c.supportRequestSchema])),
@@ -55,6 +57,7 @@ test('all fixtures are accounted for and referenced', () => {
     'invalid-request-stop-with-assignee',
     'invalid-learner-notification-with-record',
     'error-claim-conflict',
+    'invalid-request-complete-with-assignee',
   ];
   assert.deepEqual(
     readdirSync(root).sort(),
@@ -64,6 +67,7 @@ test('all fixtures are accounted for and referenced', () => {
   assert.equal(c.supportRequestSchema.safeParse(fixture(invalid[0])).success, false);
   assert.equal(c.supportRequestSchema.safeParse(fixture(invalid[1])).success, false);
   assert.equal(c.learnerSupportNotificationSchema.safeParse(fixture(invalid[2])).success, false);
+  assert.equal(c.supportRequestSchema.safeParse(fixture(invalid[4])).success, false);
 });
 test('every request state requires its fields and rejects fields belonging to other states', () => {
   const fields = [
@@ -105,11 +109,12 @@ test('every request state requires its fields and rejects fields belonging to ot
     assert.equal(c.supportRequestSchema.safeParse({ ...q, createdAt: 'yesterday' }).success, false);
     assert.equal(c.supportRequestSchema.safeParse({ ...q, memo: 'private' }).success, false);
   }
-  for (const status of ['assigned', 'in_progress'])
-    assert.equal(
-      c.supportRequestSchema.safeParse({ ...fixture('request-stop-open'), status }).success,
-      false,
-    );
+  for (const kind of ['stop', 'complete'])
+    for (const status of ['assigned', 'in_progress'])
+      assert.equal(
+        c.supportRequestSchema.safeParse({ ...fixture(`request-${kind}-open`), status }).success,
+        false,
+      );
 });
 test('all support transitions including skips, terminal states and self transitions', () => {
   const allowed = new Set([
@@ -117,8 +122,9 @@ test('all support transitions including skips, terminal states and self transiti
     'help:assigned:in_progress',
     'help:in_progress:acknowledged',
     'stop:open:acknowledged',
+    'complete:open:acknowledged',
   ]);
-  for (const kind of ['help', 'stop'] as const)
+  for (const kind of ['help', 'stop', 'complete'] as const)
     for (const from of c.supportStatusSchema.options)
       for (const to of c.supportStatusSchema.options) {
         assert.equal(c.canTransitionSupport(kind, from, to), allowed.has(`${kind}:${from}:${to}`));
@@ -189,7 +195,7 @@ test('operation bodies accept only empty objects; response shapes preserve the A
     c.supportRequestListResponseSchema.parse({
       requests: requests.map((n) => fixture(`request-${n}`)),
     }).requests.length,
-    6,
+    8,
   );
   for (const status of c.supportStatusSchema.options)
     assert.ok(c.supportRequestStatusQuerySchema.safeParse({ status }).success);

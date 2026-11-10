@@ -10,6 +10,33 @@ import { learnerProfileListResponseSchema } from '../../../packages/shared/src/l
 import { SupportRecordForm } from './support-record.tsx';
 
 type Api = (path: string, method?: string, body?: unknown) => Promise<any>;
+const helpStatusLabel = (status: string) =>
+  status === 'open'
+    ? '対応待ち'
+    : status === 'assigned'
+      ? '担当決定済み'
+      : status === 'in_progress'
+        ? '対応中'
+        : '対応完了';
+// 要求の種類ごとの見出し・バッジ・状態文言。未知の種類を「手伝って」と誤表示しない。
+function kindView(q: { kind: string; status: string }) {
+  if (q.kind === 'stop')
+    return { label: 'やめる', badge: 'badge-fail', status: helpStatusLabel(q.status) };
+  if (q.kind === 'complete')
+    return {
+      label: 'おわった',
+      badge: 'badge-ok',
+      status: q.status === 'open' ? '確認待ち' : '確認済み',
+    };
+  if (q.kind === 'help')
+    return {
+      label: '手伝って',
+      badge: q.status === 'open' ? 'badge-wait' : 'badge-ok',
+      status: helpStatusLabel(q.status),
+    };
+  return { label: '支援要求', badge: 'badge-wait', status: helpStatusLabel(q.status) };
+}
+
 export function StaffSupport({
   api,
   subscribe,
@@ -213,24 +240,8 @@ export function StaffSupport({
           {items.map((q) => (
             <section key={q.requestId} className='support-card'>
               <h2>
-                {q.kind === 'stop' ? 'やめる' : '手伝って'}：
-                <span
-                  className={`badge badge-css ${
-                    q.kind === 'stop'
-                      ? 'badge-fail'
-                      : q.status === 'open'
-                        ? 'badge-wait'
-                        : 'badge-ok'
-                  }`}
-                >
-                  {q.status === 'open'
-                    ? '対応待ち'
-                    : q.status === 'assigned'
-                      ? '担当決定済み'
-                      : q.status === 'in_progress'
-                        ? '対応中'
-                        : '対応完了'}
-                </span>
+                {kindView(q).label}：
+                <span className={`badge badge-css ${kindView(q).badge}`}>{kindView(q).status}</span>
               </h2>
               <p>
                 本人：{learnerNames.get(q.learnerId) ?? q.learnerId}／工程：{q.stepId}
@@ -238,9 +249,9 @@ export function StaffSupport({
               {q.kind === 'help' && q.status !== 'open' && (
                 <p>担当：{q.assignedTo === uid ? '自分' : q.assignedTo}</p>
               )}
-              {q.kind === 'stop' && q.status === 'open' && (
+              {(q.kind === 'stop' || q.kind === 'complete') && q.status === 'open' && (
                 <button disabled={!!busy[q.requestId]} onClick={() => void act(q, 'acknowledge')}>
-                  停止を確認した
+                  {q.kind === 'stop' ? '停止を確認した' : '完了を確認した'}
                 </button>
               )}
               {q.kind === 'help' && q.status === 'open' && (

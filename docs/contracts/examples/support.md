@@ -33,11 +33,11 @@ Issue #26の共有契約と架空の入出力例を示す。要件は[支援フ�
 
 ## 支援要求と再送
 
-help は open → assigned → in_progress → acknowledged だけを許可する。stop は open → acknowledged だけを許可する。段階飛ばし、逆戻り、acknowledged からの遷移は拒否する。再送の成功扱いは、新しい状態遷移とは別に判定する。
+help は open → assigned → in_progress → acknowledged だけを許可する。stop と complete（完了通知）は open → acknowledged だけを許可する。段階飛ばし、逆戻り、acknowledged からの遷移は拒否する。再送の成功扱いは、新しい状態遷移とは別に判定する。
 
-help の各状態の例は [open](../../../packages/shared/fixtures/support/request-help-open.json)、[assigned](../../../packages/shared/fixtures/support/request-help-assigned.json)、[in_progress](../../../packages/shared/fixtures/support/request-help-in-progress.json)、[acknowledged](../../../packages/shared/fixtures/support/request-help-acknowledged.json)。stop の例は [open](../../../packages/shared/fixtures/support/request-stop-open.json)、[acknowledged](../../../packages/shared/fixtures/support/request-stop-acknowledged.json)。各要求は revision が1以上で、状態変更ごとに増加する。各要求は本人と工程（learnerId・stepId）を常に含み、職員画面で誰のどの工程かを表示する。
+help の各状態の例は [open](../../../packages/shared/fixtures/support/request-help-open.json)、[assigned](../../../packages/shared/fixtures/support/request-help-assigned.json)、[in_progress](../../../packages/shared/fixtures/support/request-help-in-progress.json)、[acknowledged](../../../packages/shared/fixtures/support/request-help-acknowledged.json)。stop の例は [open](../../../packages/shared/fixtures/support/request-stop-open.json)、[acknowledged](../../../packages/shared/fixtures/support/request-stop-acknowledged.json)。complete は本人が最後の工程で完了を記録した時に作られ、職員への完了通知に使う。例は [open](../../../packages/shared/fixtures/support/request-complete-open.json)、[acknowledged](../../../packages/shared/fixtures/support/request-complete-acknowledged.json)。各要求は revision が1以上で、状態変更ごとに増加する。各要求は本人と工程（learnerId・stepId）を常に含み、職員画面で誰のどの工程かを表示する。
 
-claim/start/acknowledge は共通の strict な空object要求を使う。clientRequestId、冪等キー、担当者や時刻を要求へ追加しない。担当者と時刻はサーバーが認証主体から確定する。同じ職員による再送では元の担当者と時刻を保つ。claim はトランザクションで最初に保存できた職員を担当者とし、別の職員との担当競合は409にする。help の開始・完了・職員側の再開は担当職員だけに許可する。stop の確認は同じ所属の職員に許可し、担当・開始情報は持たせない。
+claim/start/acknowledge は共通の strict な空object要求を使う。clientRequestId、冪等キー、担当者や時刻を要求へ追加しない。担当者と時刻はサーバーが認証主体から確定する。同じ職員による再送では元の担当者と時刻を保つ。claim はトランザクションで最初に保存できた職員を担当者とし、別の職員との担当競合は409にする。help の開始・完了・職員側の再開は担当職員だけに許可する。stop と complete の確認は同じ所属の職員に許可し、担当・開始情報は持たせない。complete は担当決定・開始・記録・再開・session-state の対象外とする。
 
 resume は clientRequestId が1..100文字、expectedSessionRevision が整数で0以上。同じキーの再送で再開を重ねない。対応中または対応完了のhelpだけが対象で、必要な完了記録、対象要求で支援待ちのセッションの再開、イベント保存を一つのトランザクションで行う。版と工程を保ち、activeSupportRequestId を外す。stopped の再開は拒否する。記録入力やAI生成の完了を再開条件にしない。
 
@@ -55,7 +55,7 @@ resume は clientRequestId が1..100文字、expectedSessionRevision が整数�
 | 409 | 担当、状態、revisionの競合 |
 | 422 | 入力不正 |
 
-拒否するJSON例は [担当者欠落](../../../packages/shared/fixtures/support/invalid-request-assigned-without-assignee.json)、[stopへの担当情報混入](../../../packages/shared/fixtures/support/invalid-request-stop-with-assignee.json)、[本人通知への記録混入](../../../packages/shared/fixtures/support/invalid-learner-notification-with-record.json)。スキーマは形式を検査し、認可や再送処理はサーバーが行う。
+拒否するJSON例は [担当者欠落](../../../packages/shared/fixtures/support/invalid-request-assigned-without-assignee.json)、[stopへの担当情報混入](../../../packages/shared/fixtures/support/invalid-request-stop-with-assignee.json)、[completeへの担当情報混入](../../../packages/shared/fixtures/support/invalid-request-complete-with-assignee.json)、[本人通知への記録混入](../../../packages/shared/fixtures/support/invalid-learner-notification-with-record.json)。スキーマは形式を検査し、認可や再送処理はサーバーが行う。
 
 ## WebSocketと通信断
 
