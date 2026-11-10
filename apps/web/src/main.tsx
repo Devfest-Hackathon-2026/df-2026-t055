@@ -14,8 +14,14 @@ import {
 import {
   releaseCopyResponseSchema,
   improvementRetryInputSchema,
+  generationJobStatusSchema,
 } from '../../../packages/shared/src/index.ts';
-import { missingDraftChecks, draftPreviewMode, savedDraftReview } from './draft-review.ts';
+import {
+  missingDraftChecks,
+  draftPreviewMode,
+  savedDraftReview,
+  generationFailureReason,
+} from './draft-review.ts';
 import { StaffLearners } from './staff-learners.tsx';
 import { StaffSupport } from './staff-support.tsx';
 import { createTokenProvider } from './auth.ts';
@@ -508,6 +514,7 @@ function Draft({ id, action }: { id: string; action: Action }) {
   const [displayMode, setDisplayMode] = useState<'photo_only' | 'photo_text'>('photo_text'),
     [audioGuidance, setAudioGuidance] = useState(false);
   const [source, setSource] = useState('');
+  const [generationFailure, setGenerationFailure] = useState('');
   const [improvementSource, setImprovementSource] = useState<any>();
   const [appliedRefs, setAppliedRefs] = useState<Array<{ recordId: string; revision: number }>>([]);
   const [previewMode, setPreviewMode] = useState<'photo_only' | 'photo_text'>('photo_text');
@@ -537,6 +544,24 @@ function Draft({ id, action }: { id: string; action: Action }) {
   const load = async () => {
     const d = (await api(`/drafts/${id}`)).draft;
     setDraft(d);
+    setGenerationFailure('');
+    if (!isManualDraft(d) && d.status === 'failed' && d.jobId) {
+      try {
+        const job = generationJobStatusSchema.parse(
+          await api(`/jobs/${encodeURIComponent(d.jobId)}`),
+        );
+        if (
+          job.jobId !== d.jobId ||
+          job.draftId !== id ||
+          job.kind !== 'guide' ||
+          job.status !== 'failed'
+        )
+          throw Error('INVALID_JOB');
+        setGenerationFailure(generationFailureReason(job.errorCode));
+      } catch {
+        setGenerationFailure('失敗理由を取得できませんでした。「再取得」で確認してください。');
+      }
+    }
     setDisplayMode(draftPreviewMode(d.displayMode));
     setAudioGuidance(d.audioGuidance ?? false);
     setSteps(d.editedSteps);
@@ -695,7 +720,10 @@ function Draft({ id, action }: { id: string; action: Action }) {
         <p role='status'>動画解析中です。3秒ごとに状態を確認しています。</p>
       ) : !manual && draft.status === 'failed' ? (
         <section>
-          <p role='alert'>生成に失敗しました。本人用の手順は作成されていません。</p>
+          <p role='alert'>
+            生成に失敗しました。本人用の手順は作成されていません。
+            {generationFailure || generationFailureReason()}
+          </p>
           {error && <p role='alert'>{error}</p>}
           <button disabled={busy} onClick={() => void retry()}>
             新しいジョブで再試行

@@ -33,9 +33,9 @@ source =
   '\nexport ' +
   source.slice(source.indexOf('function Handover('), source.indexOf('\nfunction Learner('));
 source = `import React, {useState,useEffect,useRef} from ${JSON.stringify(hookUrl)};
-import {missingDraftChecks,draftPreviewMode,savedDraftReview} from ${JSON.stringify(new URL('../apps/web/src/draft-review.ts', import.meta.url).href)};
+import {missingDraftChecks,draftPreviewMode,savedDraftReview,generationFailureReason} from ${JSON.stringify(new URL('../apps/web/src/draft-review.ts', import.meta.url).href)};
 import {isManualDraft,releaseCopySource,beginReleaseCopy} from ${JSON.stringify(new URL('../apps/web/src/release-copy.ts', import.meta.url).href)};
-import {releaseCopyResponseSchema,improvementRetryInputSchema} from ${JSON.stringify(new URL('../packages/shared/src/index.ts', import.meta.url).href)};
+import {releaseCopyResponseSchema,improvementRetryInputSchema,generationJobStatusSchema} from ${JSON.stringify(new URL('../packages/shared/src/index.ts', import.meta.url).href)};
 const ImprovementReview=()=>null;
 const api=(...args)=>globalThis.draftApi(...args); const go=(path)=>globalThis.draftGo?.(path); const Asset=()=>null;
 export ${source}`;
@@ -176,6 +176,78 @@ async function open(h: ReturnType<typeof harness>) {
   await hooks.flush();
   return h.render();
 }
+
+for (const [errorCode, reason] of [
+  ['MODEL_OUTPUT_INVALID', 'AIの出力が必要な形式や条件を満たしませんでした。'],
+  ['MODEL_TIMEOUT', 'AIからの応答が制限時間内に返りませんでした。'],
+  ['MODEL_CALL_FAILED', 'AIへの生成依頼に失敗しました。'],
+  ['FRAME_EXTRACTION_FAILED', '手本動画から写真を切り出せませんでした。'],
+  ['JOB_TIMEOUT', '生成処理が制限時間を超えました。'],
+  ['ATTEMPT_LIMIT', 'このジョブの実行回数が上限に達しました。'],
+  ['GENERATION_FAILED', '生成処理を完了できませんでした。'],
+  ['private provider exception / private generated output', '生成処理を完了できませんでした。'],
+  ['__proto__', '生成処理を完了できませんでした。'],
+]) {
+  test(`failed draft displays only the safe reason for ${errorCode}`, async () => {
+    const h = harness({
+      status: 'failed',
+      jobId: 'failed-job',
+      aiProposal: { steps: [], reviewFlags: [], rawOutput: 'private generated output' },
+      internalException: 'private provider exception',
+    });
+    const request = (globalThis as any).draftApi;
+    Object.assign(globalThis, {
+      draftApi: async (url: string) => {
+        if (url === '/jobs/failed-job')
+          return {
+            schemaVersion: '1',
+            jobId: 'failed-job',
+            draftId: 'draft',
+            kind: 'guide',
+            status: 'failed',
+            errorCode,
+          };
+        return request(url);
+      },
+    });
+    const tree = await open(h);
+    assert.ok(nodes(tree).some((n) => n.props.role === 'alert' && text(n).includes(reason)));
+    assert.doesNotMatch(text(tree), /private|MODEL_|__proto__/);
+    assert.ok(button(tree, '新しいジョブで再試行'));
+  });
+}
+
+test('job fetch and validation failures remain safe and can be fetched again', async () => {
+  for (const mode of ['network', 'schema', 'mismatch']) {
+    const h = harness({ status: 'failed', jobId: 'failed-job' });
+    const request = (globalThis as any).draftApi;
+    let recovered = false;
+    Object.assign(globalThis, {
+      draftApi: async (url: string) => {
+        if (url !== '/jobs/failed-job') return request(url);
+        if (!recovered && mode === 'network') throw Error('private provider exception');
+        return {
+          schemaVersion: '1',
+          jobId: 'failed-job',
+          draftId: !recovered && mode === 'mismatch' ? 'other' : 'draft',
+          kind: 'guide',
+          status: 'failed',
+          errorCode: 'MODEL_TIMEOUT',
+          ...(!recovered && mode === 'schema' ? { rawOutput: 'private generated output' } : {}),
+        };
+      },
+    });
+    let tree = await open(h);
+    assert.match(text(tree), /失敗理由を取得できませんでした/);
+    assert.doesNotMatch(text(tree), /private|MODEL_|制限時間内/);
+    recovered = true;
+    button(tree, '再取得').props.onClick();
+    await settle();
+    tree = h.render();
+    assert.match(text(tree), /AIからの応答が制限時間内に返りませんでした/);
+    assert.doesNotMatch(text(tree), /失敗理由を取得できませんでした/);
+  }
+});
 
 test('review helpers list missing steps and flags, default mode, and validate server response', () => {
   const h = harness();
@@ -615,7 +687,15 @@ test('failed improvement retry keeps source and summaries, and reuses its new re
     draftApi: async (url: string, method = 'GET', body?: any) => {
       if (url === '/drafts/draft') return { draft: h.server };
       if (url === '/tasks/task') return { task: {} };
-      if (url === '/jobs/failed-job') return { status: 'failed', draftId: 'draft', retryInput };
+      if (url === '/jobs/failed-job')
+        return {
+          schemaVersion: '1',
+          jobId: 'failed-job',
+          kind: 'guide',
+          status: 'failed',
+          draftId: 'draft',
+          retryInput,
+        };
       if (method === 'POST') {
         posts.push(body);
         if (posts.length === 1) throw Error('network');
@@ -663,6 +743,9 @@ test('failed improvement retry shows conflict and reselect path without falling 
       if (url === '/tasks/task') return { task: {} };
       if (url === '/jobs/failed-job')
         return {
+          schemaVersion: '1',
+          jobId: 'failed-job',
+          kind: 'guide',
           status: 'failed',
           draftId: 'draft',
           retryInput: {
@@ -703,7 +786,14 @@ test('missing retry snapshot never falls back to creating an initial generation'
     draftApi: async (url: string, method = 'GET', body?: any) => {
       if (url === '/drafts/draft') return { draft: h.server };
       if (url === '/tasks/task') return { task: {} };
-      if (url === '/jobs/failed-job') return { status: 'failed', draftId: 'draft' };
+      if (url === '/jobs/failed-job')
+        return {
+          schemaVersion: '1',
+          jobId: 'failed-job',
+          kind: 'guide',
+          status: 'failed',
+          draftId: 'draft',
+        };
       if (method === 'POST') posts.push(body);
       throw Error('unexpected');
     },
@@ -724,6 +814,15 @@ test('initial generation retry remains an initial request', async () => {
     draftApi: async (url: string, method = 'GET', body?: any) => {
       if (url === '/drafts/draft') return { draft: h.server };
       if (url === '/tasks/task') return { task: {} };
+      if (url === '/jobs/failed-job')
+        return {
+          schemaVersion: '1',
+          jobId: 'failed-job',
+          kind: 'guide',
+          status: 'failed',
+          draftId: 'draft',
+          errorCode: 'MODEL_TIMEOUT',
+        };
       if (method === 'POST') {
         posts.push(body);
         return { jobId: 'next', draftId: 'next-draft' };

@@ -74,6 +74,7 @@ import {
   initialGuideInputSnapshotSchema,
   correctionContextInputSnapshotSchema,
   improvementRetryInputSchema,
+  generationJobStatusSchema,
 } from '../../../packages/shared/src/generation.ts';
 export class HttpError extends Error {
   constructor(
@@ -650,12 +651,18 @@ export function createApp(
         supportInputs: snapshot.supportInputs,
       });
     }
-    send(res, {
-      status: j.status,
-      draftId: j.draftId,
-      errorCode: j.errorCode,
-      ...(retryInput ? { retryInput } : {}),
-    });
+    send(
+      res,
+      generationJobStatusSchema.parse({
+        schemaVersion: '1',
+        jobId: j.id,
+        kind: j.kind,
+        status: j.status,
+        draftId: j.draftId,
+        errorCode: j.errorCode,
+        ...(retryInput ? { retryInput } : {}),
+      }),
+    );
   });
   api.get('/drafts/:id', async (req, res) => {
     staff(res);
