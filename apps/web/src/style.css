@@ -162,4 +162,5 @@ main button.secondary:disabled,main button.secondary:disabled:hover{background:#
 .pf-edit>.pf-saved{grid-column:2;grid-row:2/span 6;margin-top:0}
 .pf-edit>h1,.pf-edit>[role=alert]{grid-column:1/-1}
 }
+header a.brand{display:inline-flex;align-items:center;background:#fff;border-radius:10px;padding:4px 10px}.brand-logo,.login-logo{background:none;border-radius:0;max-height:none}.brand-logo{height:40px;width:auto;max-width:none}.login-logo{display:block;width:100%;max-width:320px;height:auto;margin:0 auto 8px}@media(max-width:760px){.brand-logo{height:32px}}
 header :focus-visible{outline-color:#ffd27a}
