@@ -29,6 +29,8 @@ const hookUrl = 'data:text/javascript;base64,' + Buffer.from(hookSource).toStrin
 const hooks = await import(hookUrl);
 let source = await readFile(new URL('../apps/web/src/main.tsx', import.meta.url), 'utf8');
 source =
+  source.slice(source.indexOf('function Staff('), source.indexOf('function Draft(')) +
+  '\nexport ' +
   source.slice(source.indexOf('function Draft('), source.indexOf('\nfunction Handover(')) +
   '\nexport ' +
   source.slice(source.indexOf('function Handover('), source.indexOf('\nfunction Learner('));
@@ -46,7 +48,7 @@ const compiled = ts.transpileModule(source, {
     module: ts.ModuleKind.ESNext,
   },
 }).outputText;
-const { Draft, Handover } = await import(
+const { Staff, Draft, Handover } = await import(
   'data:text/javascript;base64,' + Buffer.from(compiled).toString('base64')
 );
 function nodes(tree: any): any[] {
@@ -63,7 +65,7 @@ function button(tree: any, label: string) {
   return nodes(tree).find((n) => n.type === 'button' && text(n) === label);
 }
 
-function harness(overrides: Record<string, unknown> = {}) {
+function harness(overrides: Record<string, unknown> = {}, job: Record<string, unknown> = {}) {
   hooks.reset();
   const step = {
     stepId: 'one',
@@ -88,6 +90,7 @@ function harness(overrides: Record<string, unknown> = {}) {
     revision: 1,
     status: 'editing',
     taskId: 'task',
+    jobId: 'job',
     learnerId: 'a',
     editedSteps: [step],
     reviewChecks: checks,
@@ -108,6 +111,7 @@ function harness(overrides: Record<string, unknown> = {}) {
     },
     draftApi: async (url: string, method = 'GET', body?: any) => {
       calls.push({ url, method, body });
+      if (method === 'GET' && url === '/jobs/job') return structuredClone(job);
       if (method === 'GET' && url === '/handover/releases')
         return { releases: [{ releaseId: 'source', title: '作業', version: 1 }] };
       if (method === 'GET' && url === '/handover/releases/source')
@@ -724,6 +728,7 @@ test('initial generation retry remains an initial request', async () => {
     draftApi: async (url: string, method = 'GET', body?: any) => {
       if (url === '/drafts/draft') return { draft: h.server };
       if (url === '/tasks/task') return { task: {} };
+      if (url === '/jobs/failed-job') return { status: 'failed' };
       if (method === 'POST') {
         posts.push(body);
         return { jobId: 'next', draftId: 'next-draft' };
@@ -735,4 +740,56 @@ test('initial generation retry remains an initial request', async () => {
   button(tree, '新しいジョブで再試行').props.onClick();
   await settle();
   assert.deepEqual(posts, [{ learnerId: 'a' }]);
+});
+
+test('候補のFake表記は保存済みジョブのmodelIdだけを使い、表示名や認証方式で実生成を断定しない', async () => {
+  for (const modelId of ['fake-fixture', 'gemini-test', undefined]) {
+    const h = harness({}, { modelId, displayName: 'Vertex生成成功' });
+    h.render();
+    await hooks.flush();
+    const content = text(h.render());
+    assert.equal(content.includes('Fake候補'), modelId === 'fake-fixture');
+    assert.equal(content.includes('AIの候補です'), modelId !== 'fake-fixture');
+    assert.doesNotMatch(content, /Vertex生成成功/);
+    assert.ok(h.calls.some((c) => c.url === '/jobs/job'));
+  }
+});
+
+test('生成前のボタンはモデルを断定せず、作業一覧のFake表記は各ジョブのmodelIdに従う', async () => {
+  for (const modelId of ['fake-fixture', 'gemini-test', undefined]) {
+    hooks.reset();
+    Object.assign(globalThis, {
+      draftApi: async (url: string) =>
+        url === '/tasks'
+          ? {
+              tasks: [
+                {
+                  id: 'task',
+                  title: '作業',
+                  status: 'ready',
+                  generationJobs: [
+                    {
+                      jobId: 'job',
+                      draftId: 'draft',
+                      status: 'succeeded',
+                      modelId,
+                      displayName: 'Vertex生成成功',
+                    },
+                  ],
+                },
+              ],
+            }
+          : { items: [] },
+    });
+    const render = () => {
+      hooks.begin();
+      return Staff({ path: '/staff', action: async (fn: any) => fn() });
+    };
+    render();
+    await hooks.flush();
+    const tree = render();
+    assert.ok(button(tree, 'AIの下書きを作る'));
+    assert.equal(text(tree).includes('開発用Fake'), modelId === 'fake-fixture');
+    assert.doesNotMatch(text(tree), /Vertex生成成功/);
+  }
 });

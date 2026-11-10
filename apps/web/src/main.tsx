@@ -271,7 +271,7 @@ function App() {
         </a>
         {authMode === 'demo' ? (
           <>
-            <span>開発デモ · Fake生成</span>
+            <span>開発デモ</span>
             <label>
               デモアカウント{' '}
               <select
@@ -459,7 +459,8 @@ function Staff({ path, action }: { path: string; action: Action }) {
               {t.videoAssetId && <Asset id={t.videoAssetId} video />}
               {t.generationJobs?.map((j: any) => (
                 <p key={j.jobId}>
-                  生成状態：{j.status}{' '}
+                  生成状態：{j.status}
+                  {j.modelId === 'fake-fixture' ? '（開発用Fake）' : ''}{' '}
                   <button onClick={() => go(`/staff/tasks/${t.id}/drafts/${j.draftId}`)}>
                     下書きを開く
                   </button>
@@ -481,7 +482,7 @@ function Staff({ path, action }: { path: string; action: Action }) {
                   })
                 }
               >
-                AIの下書きを作る（開発用Fake）
+                AIの下書きを作る
               </button>
             </section>
           ))}
@@ -492,6 +493,7 @@ function Staff({ path, action }: { path: string; action: Action }) {
 }
 function Draft({ id, action }: { id: string; action: Action }) {
   const [draft, setDraft] = useState<any>(),
+    [job, setJob] = useState<any>(),
     [task, setTask] = useState<any>(),
     [steps, setSteps] = useState<EditedStep[]>([]),
     [checks, setChecks] = useState<ReviewChecks>({
@@ -533,6 +535,7 @@ function Draft({ id, action }: { id: string; action: Action }) {
   };
   const load = async () => {
     const d = (await api(`/drafts/${id}`)).draft;
+    setJob(d.jobId ? await api(`/jobs/${d.jobId}`) : undefined);
     setDraft(d);
     setDisplayMode(draftPreviewMode(d.displayMode));
     setAudioGuidance(d.audioGuidance ?? false);
@@ -716,7 +719,7 @@ function Draft({ id, action }: { id: string; action: Action }) {
           <p>
             {manual
               ? '承認版をコピーした手作業の下書きです。原動画と照合し、修正後にすべての確認を行ってから、新しい版として承認してください。元の承認版と実行中の手順は変わりません。'
-              : 'Fake候補です。動画の動作・原音と候補を照合し、必要な修正と写真切り出しを行ってください。確認欄はすべて未確認から始まります。'}
+              : `${job?.modelId === 'fake-fixture' ? 'Fake候補' : 'AIの候補'}です。動画の動作・原音と候補を照合し、必要な修正と写真切り出しを行ってください。確認欄はすべて未確認から始まります。`}
           </p>
           {error && <p role='alert'>{error}</p>}
           {latest && (

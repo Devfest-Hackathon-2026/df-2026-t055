@@ -210,7 +210,7 @@ Cloud Storageは`source/{orgId}/{taskId}/...`、`draft/{orgId}/{draftId}/...`、
 | `GET /learners/{id}/work-guides` / `GET /learners/{id}/work-guides/{taskId}/support-records` | 職員 | 作業別の次回版・未反映件数・生成／確認状態と、対象の本人・作業の支援記録。前者は `{schemaVersion,items:[{taskId,title,assignment,unappliedCount,latestDraft,latestGeneration}]}` を返す。未存在の割当・下書き・生成は `null`。後者は `{schemaVersion,records}` を返し、各記録の `applied` は割当版とその継承元が採用した同一ID・revisionに限りtrueとする。継承元が欠落・循環・別対象の場合は409を返す |
 | `GET /learners/{id}/work-guides/{taskId}/corrections` | 職員 | 同じ所属の対象本人・作業の修正履歴、参考メモ、要約ジョブの状態。保存済みの修正とAIの提案を分けて返す |
 | `POST /tasks/{id}/generations` | 職員 | `{learnerId}` → 202 `{jobId,draftId}`。記録からの改善では `sourceReleaseId, supportInputs:[{recordId, revision, summary}], clientRequestId` も送る。新規生成・改善を合わせて1作業あたり手順下書きの生成試行10回まで |
-| `GET /jobs/{id}` | 職員 | `{kind,status,draftId,errorCode?}`。画面は3秒間隔で取得。下書きの生成状態にはguideのジョブを使う。失敗した改善ジョブには、再試行用に受付時の本人・元版・確認済み要約と記録版を `retryInput` として返す |
+| `GET /jobs/{id}` | 職員 | `{kind,status,draftId,modelId,promptVersion,errorCode?}`。画面は3秒間隔で取得。下書きの生成状態にはguideのジョブを使う。失敗した改善ジョブには、再試行用に受付時の本人・元版・確認済み要約と記録版を `retryInput` として返す |
 | `GET /drafts/{id}` | 職員 | AI原文と編集データを別オブジェクトで返す |
 | `PATCH /drafts/{id}` | 職員 | `{expectedRevision,editedSteps,reviewChecks,displayMode?,audioGuidance?,appliedSupportRecordRefs?,correctionReason?}` → `{revision,reviewChecks}`。内容を変更した場合は第2節の規則で確認チェックを外し、保存後のチェック状態を返す。編集内容の差分があれば修正履歴も保存し、参考メモの生成を非同期で受け付ける。確認チェックだけの変更や、競合で保存できなかった修正からは履歴を作らない |
 | `POST /drafts/{id}/frames` | 職員 | `{frameMs}` → `{imageAssetId}`。サーバーのffmpegで原動画から静止画を切り出す |
@@ -291,7 +291,7 @@ Vertex AI経由のGoogle Gen AI SDKを使う。初回生成の入力は非公開
 
 全キー必須、stepsは1〜20件、stepIdは一意。全時刻は`0 <= startMs <= frameMs <= endMs <= durationMs`、工程順はstartMsの昇順とする。短文は40文字、候補文は各200文字、reviewFlagsは各10件・各100文字まで。聞き取れない音声は空文字と理由を返す。Geminiのstatusや承認フィールドは受け取らない。
 
-API側でも同じスキーマ、文字数、時刻、参照先を検査する。違反・空出力・安全フィルターによる停止はジョブfailedとし、本人向けデータを一切作らない。意味の正しさは職員の照合で判断する。モデルID、プロンプト版、生成所要時間、修正件数を記録する。
+API側でも同じスキーマ、文字数、時刻、参照先を検査する。違反・空出力・安全フィルターによる停止はジョブfailedとし、本人向けデータを一切作らない。意味の正しさは職員の照合で判断する。モデルID、プロンプト版、生成所要時間、修正件数を記録する。手順下書きと参考メモの受付は、モデル選択と同じ設定元のID・プロンプト版を保存する。Fakeは `fake-fixture`、Vertexは選択した実モデルIDとし、職員画面のFake表記は保存済みジョブの `modelId` に基づく。生成前のボタンはモデルを断定せず、表示名だけで実Vertex生成の成功とは判定しない。
 
 モデルの具体ID・利用ロケーション・入出力単価は **AI担当が11/8午前にプロジェクトの利用可能モデルと公式料金表で決める**。選定条件は動画・音声入力、構造化JSON、手本1本の成功、予算内のFlash系モデル。決定値を環境設定と検証記録に固定し、失敗時に別モデルへ自動切替しない。
 
