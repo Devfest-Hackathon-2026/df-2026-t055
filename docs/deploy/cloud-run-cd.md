@@ -1,3 +1,10 @@
+---
+type: Runbook
+title: main更新時のCloud Run更新
+authority: operational
+status: stable
+---
+
 # main更新時のCloud Run更新
 
 `cloudbuild.cd.yaml` は型検査・テスト・ビルド後に2つのイメージを保存し、既存の `generator`、`web-api` の順で更新する。イメージはビルドIDごとに保存する。実行中の環境変数、サービスアカウント、公開範囲はCloud Runの設定を使用する。

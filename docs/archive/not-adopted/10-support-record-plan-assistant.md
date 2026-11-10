@@ -1,3 +1,10 @@
+---
+type: Historical Record
+title: 支援記録・個別支援計画の作成支援
+authority: historical
+status: deprecated
+---
+
 # 支援記録・個別支援計画の作成支援
 
 - 投稿: 会話内で提起された案

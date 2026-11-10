@@ -1,3 +1,10 @@
+---
+type: Historical Record
+title: 同い年の死亡例を毎日体験するアプリ
+authority: historical
+status: deprecated
+---
+
 # 同い年の死亡例を毎日体験するアプリ
 
 - 投稿: ヨウ0:11

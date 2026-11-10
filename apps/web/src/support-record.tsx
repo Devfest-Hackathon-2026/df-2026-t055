@@ -10,11 +10,13 @@ const empty: Fields = { observedDifficulty: '', assistanceGiven: '', improvement
 
 export function SupportRecordForm({
   requestId,
+  requestLabel,
   open,
   onClose,
   api,
 }: {
   requestId: string;
+  requestLabel?: string;
   open: boolean;
   onClose: () => void;
   api: Api;
@@ -110,11 +112,18 @@ export function SupportRecordForm({
       setFields((old) => ({ ...old, [key]: e.target.value })),
   });
   return (
-    <section hidden={!open} aria-label={`支援記録 ${requestId}`} className='record-card'>
+    <section
+      hidden={!open}
+      aria-label={`支援記録 ${requestLabel || requestId}`}
+      className='record-card'
+    >
       <h3 ref={heading} tabIndex={-1}>
         支援記録
       </h3>
-      <p>要求：{requestId}。入力を後回しにしても、支援や再開は続けられます。</p>
+      <p>
+        {requestLabel ? `対象：${requestLabel}` : `要求：${requestId}`}。
+        入力を後回しにしても、支援や再開は続けられます。
+      </p>
       {error && <p role='alert'>記録を取得または保存できませんでした：{error}</p>}
       {!loaded ? (
         <>

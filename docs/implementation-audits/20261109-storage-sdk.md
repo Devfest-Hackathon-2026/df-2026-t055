@@ -1,3 +1,10 @@
+---
+type: Implementation Audit
+title: Cloud Storage JSON API 接続の実装監査
+authority: evidence
+status: stable
+---
+
 # Cloud Storage JSON API 接続の実装監査
 
 - 対象: #29 のStorageポートと実際のGoogle認証済み接続。先行PR #110 とFirestore接続PRに依存。

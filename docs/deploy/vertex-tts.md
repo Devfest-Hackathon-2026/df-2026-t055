@@ -1,3 +1,10 @@
+---
+type: Runbook
+title: Vertex Gemini TTS の設定と確認
+authority: operational
+status: stable
+---
+
 # Vertex Gemini TTS の設定と確認
 
 TTSは任意機能であり、既定はローカルの無音Fake。実モデルを使う場合は `TTS_PROVIDER=vertex`、`GOOGLE_CLOUD_PROJECT`、`TTS_LOCATION` を設定する。`TTS_MODEL` の既定は `gemini-2.5-flash-tts`、`TTS_VOICE` の既定は `Kore`。実装が扱うモデルは `gemini-2.5-flash-tts` と `gemini-2.5-pro-tts` に限定する。SDKはApplication Default Credentialsを使う。秘密情報をリポジトリへ置かない。

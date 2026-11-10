@@ -1,3 +1,10 @@
+---
+type: Historical Record
+title: 自分専用wiki作成プラットフォーム
+authority: historical
+status: deprecated
+---
+
 # 自分専用wiki作成プラットフォーム
 
 - 投稿: 不明（元の投稿に記載なし）

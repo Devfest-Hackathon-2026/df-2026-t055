@@ -1,3 +1,10 @@
+---
+type: Runbook
+title: 生成受付・費用・保管期限
+authority: operational
+status: stable
+---
+
 # 生成受付・費用・保管期限
 
 ## 生成受付

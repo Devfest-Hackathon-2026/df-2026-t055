@@ -1,8 +1,15 @@
+---
+type: API Example
+title: "本人プロフィール API 契約（Issue #24）"
+authority: example
+status: stable
+---
+
 # 本人プロフィール API 契約（Issue #24）
 
-この文書は型の定義であり、API 実装済みではない。正本は `docs/PRODUCT_SPEC.md` 第2・3・4節。
+この文書は共有契約と架空の入出力例を示す。要件と実装・検証状況は[本人プロフィール](../../features/learner-profile.md)と[API契約](../api.md)で確認する。
 共有契約は `packages/shared/src/learner-profile.ts`、JSON例は
-[`../fixtures/learner-profile/`](../fixtures/learner-profile/) にある。
+[`../fixtures/learner-profile/`](../../../packages/shared/fixtures/learner-profile) にある。
 `tests/contract-learner-profile.test.ts` が以下のfixtureを実スキーマで直接parseする。
 既存APIへの接続・認可・永続化・競合処理は本変更の検証対象外。
 
@@ -19,10 +26,10 @@
 
 | Method / Path | requestBody schema | 成功応答 schema / JSON例 |
 | --- | --- | --- |
-| GET `/api/v1/learners` | なし | 200 `LearnerProfileListResponse` / [list-valid.json](../fixtures/learner-profile/list-valid.json) |
-| GET `/api/v1/learners/{learnerId}` | なし。path learnerId: 必須の空でないstring | 200 `LearnerProfileDetail` / [detail-valid.json](../fixtures/learner-profile/detail-valid.json) |
-| POST `/api/v1/learners` | 必須JSON `LearnerProfileCreateRequest` / [create-valid.json](../fixtures/learner-profile/create-valid.json) | 201 `LearnerProfileDetail` / [detail-valid.json](../fixtures/learner-profile/detail-valid.json) |
-| PATCH `/api/v1/learners/{learnerId}` | 必須JSON `LearnerProfileUpdateRequest`。path learnerId: 必須の空でないstring / [update-delete-disability-info.json](../fixtures/learner-profile/update-delete-disability-info.json) | 200 `LearnerProfileDetail`。削除後の応答にはdisabilityInfoキーを含めない |
+| GET `/api/v1/learners` | なし | 200 `LearnerProfileListResponse` / [list-valid.json](../../../packages/shared/fixtures/learner-profile/list-valid.json) |
+| GET `/api/v1/learners/{learnerId}` | なし。path learnerId: 必須の空でないstring | 200 `LearnerProfileDetail` / [detail-valid.json](../../../packages/shared/fixtures/learner-profile/detail-valid.json) |
+| POST `/api/v1/learners` | 必須JSON `LearnerProfileCreateRequest` / [create-valid.json](../../../packages/shared/fixtures/learner-profile/create-valid.json) | 201 `LearnerProfileDetail` / [detail-valid.json](../../../packages/shared/fixtures/learner-profile/detail-valid.json) |
+| PATCH `/api/v1/learners/{learnerId}` | 必須JSON `LearnerProfileUpdateRequest`。path learnerId: 必須の空でないstring / [update-delete-disability-info.json](../../../packages/shared/fixtures/learner-profile/update-delete-disability-info.json) | 200 `LearnerProfileDetail`。削除後の応答にはdisabilityInfoキーを含めない |
 
 一覧はstrictな `{items: LearnerProfileSummary[]}`。
 各要素は `schemaVersion, learnerId, displayName, preferences, revision` のみを含む。
@@ -60,8 +67,8 @@ PATCHで `disabilityInfo` を省略した場合は変更しない。
 `disabilityInfo: null` は任意記録の削除要求であり、保存・詳細応答にnullを残す意味ではない。
 objectを送る場合は3項目すべてが必須で、欠落があれば422を返す。
 その他のフィールドやpreferences内の設定にnullは使えない。
-[invalid-unconfirmed-null.json](../fixtures/learner-profile/invalid-unconfirmed-null.json) と
-[invalid-list-with-disability-info.json](../fixtures/learner-profile/invalid-list-with-disability-info.json) は拒否される例。
+[invalid-unconfirmed-null.json](../../../packages/shared/fixtures/learner-profile/invalid-unconfirmed-null.json) と
+[invalid-list-with-disability-info.json](../../../packages/shared/fixtures/learner-profile/invalid-list-with-disability-info.json) は拒否される例。
 
 ## エラー
 
@@ -76,7 +83,7 @@ objectを送る場合は3項目すべてが必須で、欠落があれば422を�
 | 409 | 状態・revision競合。更新のexpectedRevisionが不一致なら再取得して編集し直す |
 | 422 | 入力不正。作成・更新の未知キー、null、不正な日時、範囲外など |
 
-409のJSON例: [error-revision-conflict.json](../fixtures/learner-profile/error-revision-conflict.json)。
+409のJSON例: [error-revision-conflict.json](../../../packages/shared/fixtures/learner-profile/error-revision-conflict.json)。
 HTTP statusはJSONに混ぜず、レスポンスのstatusで表す。fixtureは既存ApiError形のままとする。
 
 ## 設計根拠と確認範囲

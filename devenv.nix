@@ -6,12 +6,12 @@ in {
   packages = [
     node
     pkgs.lefthook
-    # README-MVP.md requires ffmpeg / ffprobe 6+ on PATH (H.264 / AAC).
+    # Video inspection and frame extraction require ffmpeg / ffprobe (H.264 / AAC).
     pkgs.ffmpeg-headless
   ];
 
   # The project reads its settings from environment variables only (.env.example).
-  # No .env auto-loading: keep that contract so local runs match README-MVP.md.
+  # No .env auto-loading: export the settings before running project commands.
 
   # `npm install` is still run by hand after the first `devenv shell`; installing
   # dependencies is not a side effect of entering the shell.
@@ -21,5 +21,5 @@ in {
   '';
 
   # Git hooks are installed per clone by `npm install` (prepare script) or
-  # `npm exec lefthook install`; see README-MVP.md.
+  # `devenv shell -- npm exec lefthook install`.
 }

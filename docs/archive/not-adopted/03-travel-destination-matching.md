@@ -1,3 +1,10 @@
+---
+type: Historical Record
+title: 旅行先マッチングアプリ
+authority: historical
+status: deprecated
+---
+
 # 旅行先マッチングアプリ
 
 - 投稿: ヨウ0:11

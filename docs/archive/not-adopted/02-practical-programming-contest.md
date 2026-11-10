@@ -1,3 +1,10 @@
+---
+type: Historical Record
+title: 実際のアプリケーション開発に近い競プロ
+authority: historical
+status: deprecated
+---
+
 # 実際のアプリケーション開発に近い競プロ
 
 - 投稿: markun46490:10

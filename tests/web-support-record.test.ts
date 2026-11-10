@@ -65,6 +65,36 @@ async function settle() {
   await new Promise((r) => setImmediate(r));
 }
 
+test('対象ラベルを本文と読み上げ名に使い、取得と保存には要求IDを使う', async () => {
+  for (const requestLabel of ['本人A／工程：one／2026/11/8 9:00:00', undefined, '']) {
+    hooks.reset();
+    const calls: { path: string; method: string }[] = [];
+    const api = async (path: string, method = 'GET') => {
+      calls.push({ path, method });
+      return record;
+    };
+    const render = () => {
+      hooks.begin();
+      return SupportRecordForm({ requestId: 'q', requestLabel, open: true, onClose() {}, api });
+    };
+    let tree = render();
+    await hooks.flush();
+    tree = render();
+    assert.equal(tree.props['aria-label'], `支援記録 ${requestLabel || 'q'}`);
+    assert.ok(text(tree).includes(requestLabel ? `対象：${requestLabel}。` : '要求：q。'));
+    if (requestLabel) assert.doesNotMatch(text(tree), /要求：q/);
+    nodes(tree)
+      .find((n) => n.type === 'form')
+      .props.onSubmit({ preventDefault() {} });
+    await settle();
+    assert.deepEqual(calls, [
+      { path: '/support-requests/q/record', method: 'GET' },
+      { path: '/support-requests/q/record', method: 'PUT' },
+    ]);
+    hooks.reset();
+  }
+});
+
 test('後回しで閉じても入力は残り、保存失敗と409後も入力を保持する', async () => {
   hooks.reset();
   let open = true,

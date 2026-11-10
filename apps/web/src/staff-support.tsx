@@ -6,6 +6,7 @@ import {
   staffSupportNotificationSchema,
   type SupportRequest,
 } from '../../../packages/shared/src/support.ts';
+import { learnerProfileListResponseSchema } from '../../../packages/shared/src/learner-profile.ts';
 import { SupportRecordForm } from './support-record.tsx';
 
 type Api = (path: string, method?: string, body?: unknown) => Promise<any>;
@@ -22,6 +23,7 @@ export function StaffSupport({
   ) => () => void;
 }) {
   const [uid, setUid] = useState(''),
+    [learnerNames, setLearnerNames] = useState<Map<string, string>>(new Map()),
     [items, setItems] = useState<SupportRequest[]>([]),
     [waiting, setWaiting] = useState<string[]>([]),
     [error, setError] = useState(''),
@@ -107,6 +109,15 @@ export function StaffSupport({
   useEffect(() => {
     alive.current = true;
     let currentUid = '';
+    void api('/learners')
+      .then((result) => {
+        const { items } = learnerProfileListResponseSchema.parse(result);
+        if (alive.current)
+          setLearnerNames(new Map(items.map((item) => [item.learnerId, item.displayName])));
+      })
+      .catch(() => {
+        // 表示名を取得できなくても、IDで支援一覧を利用できる。
+      });
     void (async () => {
       try {
         currentUid = staffIdentitySchema.parse(await api('/staff/me')).uid;
@@ -225,9 +236,11 @@ export function StaffSupport({
                 </span>
               </h2>
               <p>
-                本人：{q.learnerId}／工程：{q.stepId}
+                本人：{learnerNames.get(q.learnerId) ?? q.learnerId}／工程：{q.stepId}
               </p>
-              {q.kind === 'help' && q.status !== 'open' && <p>担当：{q.assignedTo}</p>}
+              {q.kind === 'help' && q.status !== 'open' && (
+                <p>担当：{q.assignedTo === uid ? '自分' : q.assignedTo}</p>
+              )}
               {q.kind === 'stop' && q.status === 'open' && (
                 <button disabled={!!busy[q.requestId]} onClick={() => void act(q, 'acknowledge')}>
                   停止を確認した
@@ -288,18 +301,26 @@ export function StaffSupport({
           ))}
         </div>
         <div className='support-detail'>
-          {recordIds.map((requestId) => (
-            <SupportRecordForm
-              key={requestId}
-              requestId={requestId}
-              open={!!recordOpen[requestId]}
-              api={api}
-              onClose={() => {
-                setRecordOpen((old) => ({ ...old, [requestId]: false }));
-                (recordButtons.current[requestId] ?? heading.current)?.focus();
-              }}
-            />
-          ))}
+          {recordIds.map((requestId) => {
+            const q = items.find((item) => item.requestId === requestId);
+            return (
+              <SupportRecordForm
+                key={requestId}
+                requestId={requestId}
+                requestLabel={
+                  q
+                    ? `${learnerNames.get(q.learnerId) ?? q.learnerId}／工程：${q.stepId}／${new Date(q.createdAt).toLocaleString('ja-JP')}`
+                    : undefined
+                }
+                open={!!recordOpen[requestId]}
+                api={api}
+                onClose={() => {
+                  setRecordOpen((old) => ({ ...old, [requestId]: false }));
+                  (recordButtons.current[requestId] ?? heading.current)?.focus();
+                }}
+              />
+            );
+          })}
         </div>
       </div>
     </>

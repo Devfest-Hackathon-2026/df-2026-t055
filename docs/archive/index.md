@@ -1,0 +1,16 @@
+# archive
+
+- [11Aの参考資料・前例](11A-reference-materials.md)
+- [企画・採択の記録](README.md)
+- [adopted](adopted/index.md)
+- [設計フリーズ：本人に合わせた作業手順の提示](design-freeze-2026-11-07.md)
+- [5案の蠱毒：Solによる対戦と24点比較](idea-kodoku-review.md)
+- [案名](idea-template.md)
+- [知的障害福祉：2回目の調査と候補の再検討](intellectual-disability-welfare-reassessment.md)
+- [知的障害福祉：検討案と選定の経緯](intellectual-disability-welfare-review.md)
+- [利用者の特性を登録し、写真のみの作業手順を選べるようにする](learner-profile-photo-guidance-proposal.md)
+- [仮定と残作業](local-mvp-todo.md)
+- [not-adopted](not-adopted/index.md)
+- [本人向けの操作をピクトグラムで伝える](pictogram-controls-proposal.md)
+- [設計変更候補：支援中のつまずきを記録し、後から手順を改善する](support-feedback-improvement-proposal.md)
+- [設計変更案：すべてのテキスト入力欄で音声入力を使えるようにする（a11y）](voice-input-accessibility-proposal.md)

@@ -1,3 +1,10 @@
+---
+type: Historical Record
+title: 11Aの参考資料・前例
+authority: historical
+status: deprecated
+---
+
 # 11Aの参考資料・前例
 
 対象案：[11A「本人に合わせた作業手順の提示」](adopted/11-personalized-task-guidance.md) ｜ 調査日：2026年11月5日

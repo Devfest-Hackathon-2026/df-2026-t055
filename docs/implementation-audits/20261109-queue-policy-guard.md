@@ -1,3 +1,10 @@
+---
+type: Implementation Audit
+title: Cloud Tasksキュー設定の検査
+authority: evidence
+status: stable
+---
+
 # Cloud Tasksキュー設定の検査
 
 - 対象 #47 の未検証リスク。基点は統合PR #144 の `253c973`。投入前にキューの最大並列数1、最大試行数3を取得して検査し、キュー単位のHTTPターゲット上書きも拒否する。上書きはタスク側のURLやOIDC指定より優先されるため、指定した配送先・呼出元でない可能性がある。

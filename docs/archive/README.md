@@ -1,3 +1,10 @@
+---
+type: Historical Record
+title: 企画・採択の記録
+authority: historical
+status: deprecated
+---
+
 # 企画・採択の記録
 
 > このフォルダには過去の設計・調査・企画の資料を保存しています。現在の設計・実装判断は [現行仕様書](../PRODUCT_SPEC.md) を参照してください。

@@ -1,3 +1,10 @@
+---
+type: Historical Record
+title: バーチャルお墓参り
+authority: historical
+status: deprecated
+---
+
 # バーチャルお墓参り
 
 - 投稿: markun46490:10

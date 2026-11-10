@@ -1,3 +1,10 @@
+---
+type: Historical Record
+title: 5案の蠱毒：Solによる対戦と24点比較
+authority: historical
+status: deprecated
+---
+
 # 5案の蠱毒：Solによる対戦と24点比較
 
 > 採択後の追記（2026年11月5日）: チームは[11A](adopted/11-personalized-task-guidance.md)を採択した。以下の比較・推薦・保留の判断は採択前の記録として残す。現在の分類と理由は[採択・不採択の一覧](README.md)を参照。

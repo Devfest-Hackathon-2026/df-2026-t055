@@ -1,3 +1,10 @@
+---
+type: Historical Record
+title: ベテランの経験から新人が練習する
+authority: historical
+status: deprecated
+---
+
 # ベテランの経験から新人が練習する
 
 - 投稿: 壁打ちで具体化した案

@@ -25,6 +25,10 @@ source = source
   .replace(
     "'./support-record.tsx'",
     JSON.stringify('data:text/javascript,export function SupportRecordForm(){}'),
+  )
+  .replace(
+    "'../../../packages/shared/src/learner-profile.ts'",
+    JSON.stringify(new URL('../packages/shared/src/learner-profile.ts', import.meta.url).href),
   );
 const compiled = ts.transpileModule(source, {
   compilerOptions: {
@@ -73,12 +77,37 @@ test('担当外には操作を出さず、担当中は完了と本人確認後�
     startedBy: 'staff',
     startedAt: time,
   };
-  const other = { ...own, requestId: 'other', assignedTo: 'other', startedBy: 'other' };
-  const stop = { ...base, requestId: 'stop', kind: 'stop', status: 'open' };
+  const other = {
+    ...own,
+    requestId: 'other',
+    learnerId: 'b',
+    assignedTo: 'other',
+    startedBy: 'other',
+  };
+  const stop = { ...base, requestId: 'stop', learnerId: 'missing', kind: 'stop', status: 'open' };
   const calls: any[] = [];
   const api = async (path: string, method = 'GET', body?: unknown) => {
     calls.push({ path, method, body });
     if (path === '/staff/me') return { schemaVersion: '1', uid: 'staff' };
+    if (path === '/learners')
+      return {
+        items: [
+          {
+            schemaVersion: '1',
+            learnerId: 'a',
+            displayName: '本人A',
+            preferences: {},
+            revision: 1,
+          },
+          {
+            schemaVersion: '1',
+            learnerId: 'b',
+            displayName: '本人B',
+            preferences: {},
+            revision: 1,
+          },
+        ],
+      };
     if (path === '/support-requests') return { requests: [own, other, stop] };
     if (path === '/support-requests?status=acknowledged') return { requests: [] };
     if (path.endsWith('/session-state'))
@@ -101,11 +130,27 @@ test('担当外には操作を出さず、担当中は完了と本人確認後�
   await settle();
   tree = render();
   const sections = nodes(tree).filter((n) => n.type === 'section');
+  assert.match(text(sections[0]), /本人：本人A／工程：one/);
+  assert.doesNotMatch(text(sections[0]), /本人：a／|担当：staff/);
+  assert.match(text(sections[0]), /担当：自分/);
+  assert.match(text(sections[1]), /本人：本人B／工程：one/);
+  assert.match(text(sections[1]), /担当：other/);
+  assert.match(text(sections[2]), /本人：missing／工程：one/);
+  assert.equal(calls.filter((c) => c.path === '/learners').length, 1);
   assert.match(text(sections[0]), /対応完了だけを記録/);
   assert.match(text(sections[0]), /本人に再開の希望/);
   assert.doesNotMatch(text(sections[1]), /対応を始める|対応完了だけを記録|対応を終えてつづける/);
   assert.match(text(sections[2]), /停止を確認した/);
   assert.doesNotMatch(text(sections[2]), /つづける/);
+  nodes(sections[0])
+    .find((n) => n.type === 'button' && text(n) === '支援記録を開く')
+    .props.onClick();
+  tree = render();
+  const form = nodes(tree).find((n) => n.props?.requestId === 'q');
+  assert.equal(
+    form.props.requestLabel,
+    `本人A／工程：one／${new Date(time).toLocaleString('ja-JP')}`,
+  );
   const resume = nodes(sections[0]).find(
     (n) => n.type === 'button' && text(n).includes('つづける'),
   );
@@ -122,6 +167,82 @@ test('担当外には操作を出さず、担当中は完了と本人確認後�
   assert.equal(call.body.expectedSessionRevision, 5);
   assert.ok(call.body.clientRequestId);
   hooks.reset();
+});
+
+test('本人名の取得が失敗または応答待ちでも一覧と記録の対象をIDで表示する', async () => {
+  for (const unavailable of ['failure', 'pending', 'missing']) {
+    hooks.reset();
+    const q = {
+      ...base,
+      status: 'in_progress',
+      assignedTo: 'staff',
+      assignedAt: time,
+      startedBy: 'staff',
+      startedAt: time,
+    };
+    let resolveLearners!: (value: unknown) => void;
+    const api = async (path: string) => {
+      if (path === '/staff/me') return { schemaVersion: '1', uid: 'staff' };
+      if (path === '/learners') {
+        if (unavailable === 'failure') throw Error('本人一覧の取得失敗');
+        if (unavailable === 'missing') return { items: [] };
+        return new Promise((resolve) => {
+          resolveLearners = resolve;
+        });
+      }
+      if (path === '/support-requests') return { requests: [q] };
+      if (path.includes('?status=')) return { requests: [] };
+      return {
+        schemaVersion: '1',
+        sessionId: 's',
+        status: 'waiting_help',
+        revision: 5,
+        currentRequest: true,
+      };
+    };
+    const subscribe = () => () => {};
+    const render = () => {
+      hooks.begin();
+      return StaffSupport({ api, go: () => {}, subscribe });
+    };
+    render();
+    await hooks.flush();
+    await settle();
+    let tree = render();
+    assert.match(text(tree), /本人：a／工程：one/);
+    assert.doesNotMatch(text(tree), /読み込み中です|更新または操作に失敗/);
+    nodes(tree)
+      .find((n) => n.type === 'button' && text(n) === '支援記録を開く')
+      .props.onClick();
+    tree = render();
+    assert.equal(
+      nodes(tree).find((n) => n.props?.requestId === 'q').props.requestLabel,
+      `a／工程：one／${new Date(time).toLocaleString('ja-JP')}`,
+    );
+    if (unavailable === 'pending') {
+      resolveLearners({
+        items: [
+          {
+            schemaVersion: '1',
+            learnerId: 'a',
+            displayName: '本人A',
+            preferences: {},
+            revision: 1,
+          },
+        ],
+      });
+      await settle();
+      tree = render();
+      assert.match(text(tree), /本人：本人A／工程：one/);
+      const form = nodes(tree).find((n) => n.props?.requestId === 'q');
+      assert.equal(form.props.open, true);
+      assert.equal(
+        form.props.requestLabel,
+        `本人A／工程：one／${new Date(time).toLocaleString('ja-JP')}`,
+      );
+    }
+    hooks.reset();
+  }
 });
 
 test('担当競合の409は一覧を再取得し成功扱いにしない', async () => {

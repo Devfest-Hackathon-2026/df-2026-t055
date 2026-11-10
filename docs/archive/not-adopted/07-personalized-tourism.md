@@ -1,3 +1,10 @@
+---
+type: Historical Record
+title: パーソナル観光提案アプリ
+authority: historical
+status: deprecated
+---
+
 # パーソナル観光提案アプリ
 
 - 投稿: Koki🍙(ちよ)18:14
