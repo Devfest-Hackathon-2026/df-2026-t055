@@ -1,3 +1,10 @@
+---
+type: Implementation Audit
+title: Firebase認証SDK接続監査
+authority: evidence
+status: stable
+---
+
 # Firebase認証SDK接続監査
 
 - 対象 #36 の未接続部分。#111 の認証ポート、Firestore・Storage・Cloud Tasks・UIの先行PRを含むブランチをベースとする。

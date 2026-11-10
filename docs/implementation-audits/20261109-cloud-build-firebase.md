@@ -1,3 +1,10 @@
+---
+type: Implementation Audit
+title: Cloud BuildのFirebase設定監査
+authority: evidence
+status: stable
+---
+
 # Cloud BuildのFirebase設定監査
 
 - 対象 #30 の統合後の設定差分。基点はCloud Tasks検査PRの `c112485`。従来のCloud BuildはViteへ認証設定を渡さず、ブラウザが既定のdemoモードでビルドされる可能性があった。

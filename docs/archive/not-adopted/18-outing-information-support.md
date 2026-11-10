@@ -1,3 +1,10 @@
+---
+type: Historical Record
+title: 外出前に参加条件と不明点を整理する
+authority: historical
+status: deprecated
+---
+
 # 外出前に参加条件と不明点を整理する
 
 - 投稿: 2回目の調査で具体化した案

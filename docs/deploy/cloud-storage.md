@@ -1,3 +1,10 @@
+---
+type: Runbook
+title: Cloud Storage 接続
+authority: operational
+status: stable
+---
+
 # Cloud Storage 接続
 
 `STORAGE_BACKEND=cloud` を明示したAPIは、`STORAGE_BUCKET`、`GOOGLE_CLOUD_PROJECT` と Application Default Credentials を使って Cloud Storage JSON API に接続する。バケットは事前に非公開で作成し、APIのサービスアカウントに対象バケット内のオブジェクトの作成・読み取りに必要な権限を付与する。認証情報をリポジトリへ保存しない。既定はローカルストレージである。

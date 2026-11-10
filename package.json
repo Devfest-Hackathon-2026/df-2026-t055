@@ -15,6 +15,9 @@
     "lint:fix": "oxlint --fix",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
+    "docs:list": "node scripts/docs.mjs list",
+    "docs:issues": "node scripts/docs.mjs issues",
+    "docs:check": "node scripts/docs.mjs check",
     "prepare": "lefthook install || true"
   },
   "dependencies": {
@@ -30,6 +33,7 @@
     "oxfmt": "^0.78.0",
     "oxlint": "^1.93.0",
     "typescript": "^5.9.0",
-    "vite": "^7.1.0"
+    "vite": "^7.1.0",
+    "yaml": "^2.9.1"
   }
 }

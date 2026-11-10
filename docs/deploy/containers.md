@@ -1,3 +1,10 @@
+---
+type: Runbook
+title: "Issue #30 コンテナのビルドとデプロイ手順"
+authority: operational
+status: stable
+---
+
 # Issue #30 コンテナのビルドとデプロイ手順
 
 対象は linux/amd64、Node 24 の `web-api` と `generator`。実デプロイ、Artifact Registryへのpush、GCP認証情報の取得・配置は今回実施していない。Cloud Build自体も未実行。

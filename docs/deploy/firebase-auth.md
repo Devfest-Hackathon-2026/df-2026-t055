@@ -1,3 +1,10 @@
+---
+type: Runbook
+title: Firebase認証の接続
+authority: operational
+status: stable
+---
+
 # Firebase認証の接続
 
 APIでは `AUTH_BACKEND=firebase`、`FIREBASE_PROJECT_ID`（省略時 `GOOGLE_CLOUD_PROJECT`）、`FIRESTORE_ORG_ID` とApplication Default Credentialsを指定する。Firebase Admin SDKがIDトークンの署名・発行元・対象・期限と失効を検証し、サーバーに登録された所属・役割を照合する。権限のない、未登録、失効したアカウントは拒否する。Firebase Authエミュレータの設定を本番へ渡さない。

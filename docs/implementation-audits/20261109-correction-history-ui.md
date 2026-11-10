@@ -1,3 +1,10 @@
+---
+type: Implementation Audit
+title: 手直し履歴UI監査
+authority: evidence
+status: stable
+---
+
 # 手直し履歴UI監査
 
 - 対象 #72。#65 の本人別作業カードと #55 の参考メモに依存。職員が保存した変更前後と理由、未承認のAI参考メモ・状態を分けて表示する。参考メモが失敗しても履歴を表示する。

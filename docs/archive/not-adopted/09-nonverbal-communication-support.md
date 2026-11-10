@@ -1,3 +1,10 @@
+---
+type: Historical Record
+title: 声・身振りから意思確認を支える
+authority: historical
+status: deprecated
+---
+
 # 声・身振りから意思確認を支える
 
 - 投稿: 会話内で提起された案（特定の個人の事例ではない）

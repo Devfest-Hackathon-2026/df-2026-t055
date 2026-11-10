@@ -8,7 +8,7 @@ import type { ApiError, GenerationResponse } from '../packages/shared/src/index.
 const root = new URL('../packages/shared/fixtures/generation/', import.meta.url);
 const fixture = (name: string) => JSON.parse(readFileSync(new URL(`${name}.json`, root), 'utf8'));
 const examples = readFileSync(
-  new URL('../packages/shared/api-examples/generation.md', import.meta.url),
+  new URL('../docs/contracts/examples/generation.md', import.meta.url),
   'utf8',
 );
 const valid: Record<string, z.ZodType> = {
@@ -30,13 +30,13 @@ const rejects = (schema: z.ZodType, value: unknown) =>
 for (const [name, schema] of Object.entries(valid)) {
   test(`generation fixture: ${name}`, () => {
     schema.parse(fixture(name));
-    assert.ok(examples.includes(`../fixtures/generation/${name}.json`));
+    assert.ok(examples.includes(`../../../packages/shared/fixtures/generation/${name}.json`));
   });
 }
 test('all fixtures are covered and linked, including invalid and existing error shape', () => {
   assert.equal(readdirSync(root).length, 17);
   for (const name of readdirSync(root))
-    assert.ok(examples.includes(`../fixtures/generation/${name}`));
+    assert.ok(examples.includes(`../../../packages/shared/fixtures/generation/${name}`));
   rejects(g.improvementGenerationRequestSchema, fixture('invalid-improvement-summary-empty'));
   rejects(g.improvementGenerationRequestSchema, fixture('invalid-improvement-revision-zero'));
   rejects(g.correctionContextOutputSchema, fixture('invalid-context-output-too-long'));

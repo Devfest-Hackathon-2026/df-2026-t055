@@ -1,3 +1,10 @@
+---
+type: Historical Record
+title: 運動の習慣化アプリ
+authority: historical
+status: deprecated
+---
+
 # 運動の習慣化アプリ
 
 - 投稿: Koki🍙(ちよ)18:14

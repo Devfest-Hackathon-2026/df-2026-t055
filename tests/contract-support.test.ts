@@ -8,7 +8,7 @@ const root = new URL('../packages/shared/fixtures/support/', import.meta.url);
 const fixture = (name: string): any =>
   JSON.parse(readFileSync(new URL(`${name}.json`, root), 'utf8'));
 const examples = readFileSync(
-  new URL('../packages/shared/api-examples/support.md', import.meta.url),
+  new URL('../docs/contracts/examples/support.md', import.meta.url),
   'utf8',
 );
 const requests = [
@@ -38,7 +38,7 @@ const valid: Record<string, z.ZodType> = {
 for (const [name, schema] of Object.entries(valid)) {
   test(`support fixture: ${name}`, () => {
     assert.deepEqual(schema.parse(fixture(name)), fixture(name));
-    assert.ok(examples.includes(`../fixtures/support/${name}.json`));
+    assert.ok(examples.includes(`../../../packages/shared/fixtures/support/${name}.json`));
   });
 }
 test('staff snapshot contains unique request IDs', () => {

@@ -1,3 +1,10 @@
+---
+type: Implementation Audit
+title: Cloud Tasks 配送の実装監査
+authority: evidence
+status: stable
+---
+
 # Cloud Tasks 配送の実装監査
 
 - 対象: #47。先行する #42、#28 の変更とCloud Storage接続PRに依存する。

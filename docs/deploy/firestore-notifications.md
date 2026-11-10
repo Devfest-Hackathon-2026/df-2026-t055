@@ -1,3 +1,10 @@
+---
+type: Runbook
+title: Firestoreの支援通知
+authority: operational
+status: stable
+---
+
 # Firestoreの支援通知
 
 `REPOSITORY_BACKEND=firestore` を明示した場合、APIは公式 `@google-cloud/firestore` サーバーSDKとApplication Default Credentialsを使用する。`GOOGLE_CLOUD_PROJECT` と、信頼できる単一組織を表す `FIRESTORE_ORG_ID` が必須。既定以外のDBを使う場合は `FIRESTORE_DATABASE_ID` を指定する。MemoryRepositoryが既定であり、認証・Storage・Cloud Tasks・本番起動ガードの設定はこの変更では完了しない。

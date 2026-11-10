@@ -1,3 +1,10 @@
+---
+type: Historical Record
+title: 本人の選択・拒否・伝え直しを支える
+authority: historical
+status: deprecated
+---
+
 # 本人の選択・拒否・伝え直しを支える
 
 - 投稿: 壁打ちで具体化した案

@@ -1,3 +1,10 @@
+---
+type: Historical Record
+title: 80億分の1みたいなやつ
+authority: historical
+status: deprecated
+---
+
 # 80億分の1みたいなやつ
 
 - 投稿: ヨウ0:11

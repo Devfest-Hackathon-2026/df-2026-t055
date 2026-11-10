@@ -1,3 +1,10 @@
+---
+type: Historical Record
+title: 案名
+authority: historical
+status: deprecated
+---
+
 # 案名
 
 - 投稿: TODO（元の投稿表記。分からなければ不明）

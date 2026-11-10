@@ -1,0 +1,285 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "91ee00d4a78ddf5c7662c1f83b817c5b6014d0b6",
+  "sourcePath": "docs/PRODUCT_SPEC.md",
+  "sourceSha256": "0656b93f84608e5eac16355e5d373e0814334f4202853b4f3b900fa410e06290",
+  "supersededPrelude": {
+    "start": 1,
+    "end": 6
+  },
+  "sourceLineCount": 575,
+  "fragments": [
+    {
+      "start": 7,
+      "end": 58,
+      "target": "docs/product/overview.md",
+      "sha256": "50cc873b8cc437273d1d5befeead135525a0b28fd9480f83fee3bd95753b8193"
+    },
+    {
+      "start": 59,
+      "end": 84,
+      "target": "docs/product/demo-task.md",
+      "sha256": "69c4928b4dd13716a2cde423cfe504e36b1c0ace24fc477dee19de444ff7e1ba"
+    },
+    {
+      "start": 85,
+      "end": 88,
+      "target": "docs/product/workflows.md",
+      "sha256": "6ebfba17e7089d78ea0610698a262081397f77308dbbf4ec42b84e1718c23be7"
+    },
+    {
+      "start": 89,
+      "end": 92,
+      "target": "docs/features/learner-profile.md",
+      "sha256": "ee0da2387f14fa77eabaddc836326426befae78c892d78e0c9a7f3224124faad"
+    },
+    {
+      "start": 93,
+      "end": 95,
+      "target": "docs/features/draft-generation.md",
+      "sha256": "cdefb5b71f62da45548be8fbd53b4950c2ef543e76f4a0371fc7760ec5bd7cc3"
+    },
+    {
+      "start": 96,
+      "end": 99,
+      "target": "docs/features/draft-review.md",
+      "sha256": "7be446b370310fd8df7f801e4f327c745ebd7da1d71eecb9c8e806537dd9bd98"
+    },
+    {
+      "start": 100,
+      "end": 100,
+      "target": "docs/features/manual-revision.md",
+      "sha256": "dba536bbd48c8b224d720819a316686f8f20cfaffa57bbc92a82062e654d2c20"
+    },
+    {
+      "start": 101,
+      "end": 104,
+      "target": "docs/features/support-workflow.md",
+      "sha256": "b4e3fe6b7454d0ef406cbe07ae7d0953ae95d67c3c6d92da0fc890abefda2da3"
+    },
+    {
+      "start": 105,
+      "end": 110,
+      "target": "docs/features/draft-review.md",
+      "sha256": "108774f1a81c6bbb15692b375142b665863324f3dbe8ad399e4024b3f7c0d76c"
+    },
+    {
+      "start": 111,
+      "end": 120,
+      "target": "docs/features/correction-history.md",
+      "sha256": "51cfe9750d774adb0a17bf6f8f6f7ee01bf390ce23c8e46437f43724d5b7d317"
+    },
+    {
+      "start": 121,
+      "end": 123,
+      "target": "docs/features/support-records.md",
+      "sha256": "e90e0f0fe5ebaba83f0b9ffd4df8fa1b635a2ac1aa9bf9aebc8e511beeb2cf95"
+    },
+    {
+      "start": 124,
+      "end": 127,
+      "target": "docs/features/guide-improvement.md",
+      "sha256": "20ac791c6f4d738155563953fc6e5f2dea1ebfc099f686a4a9b18e939321b382"
+    },
+    {
+      "start": 128,
+      "end": 133,
+      "target": "docs/features/manual-revision.md",
+      "sha256": "d515a0d8e6a453466620eb05fc5e4f993c3377c5f3d4a799109aacabf1ab1c7c"
+    },
+    {
+      "start": 134,
+      "end": 141,
+      "target": "docs/features/learner-session.md",
+      "sha256": "40797607a99379351fdfe6850036670a300786abbed55ad68f55b478190e9df0"
+    },
+    {
+      "start": 142,
+      "end": 147,
+      "target": "docs/features/pictogram-controls.md",
+      "sha256": "00e67ab0ebefb1b99335ce289120b5e985703c6157a68af1f32e75b2f2e1f328"
+    },
+    {
+      "start": 148,
+      "end": 153,
+      "target": "docs/features/handover.md",
+      "sha256": "27062ccb4e747f539fd6a1484cdc5e8049900298dc24922f7eb14f5065430b71"
+    },
+    {
+      "start": 154,
+      "end": 200,
+      "target": "docs/contracts/data-model.md",
+      "sha256": "600ef8498240912d056b8be11c3d5ba683f883fca941ffaae83e1b444d66257b"
+    },
+    {
+      "start": 201,
+      "end": 202,
+      "target": "docs/features/speech-input.md",
+      "sha256": "51379f9d6bf4b44f54fdd40d5fc33b456be57fd14a627949485094db8d86d0a0"
+    },
+    {
+      "start": 203,
+      "end": 249,
+      "target": "docs/contracts/api.md",
+      "sha256": "ce58c6b3e09b60c88a1474cabb5365162928dea2befbd69bc1ca1b877329a7e9"
+    },
+    {
+      "start": 250,
+      "end": 257,
+      "target": "docs/features/support-workflow.md",
+      "sha256": "5cc3bc870926783b2bffe762b6b92ae45f072a7df58877986e14a8fd9569ea20"
+    },
+    {
+      "start": 258,
+      "end": 265,
+      "target": "docs/features/draft-generation.md",
+      "sha256": "5e49ac8b384ccbdbeca52536b35befbb29ee146cb7294eb029963c341aa3d603"
+    },
+    {
+      "start": 266,
+      "end": 273,
+      "target": "docs/features/correction-history.md",
+      "sha256": "974be634346fd2002027e3ed3cf083e44536649743bccda7b52793986c6a3ad2"
+    },
+    {
+      "start": 274,
+      "end": 304,
+      "target": "docs/features/draft-generation.md",
+      "sha256": "2323b26f328d4866dfa62d74f0e78f29536ea6f23eaabeea1c477a6c1919aa9e"
+    },
+    {
+      "start": 305,
+      "end": 306,
+      "target": "docs/features/tts.md",
+      "sha256": "73bfaa0bd9974baf85cc8f0bd1c5cc091f8c5fa96b1afec4edbfad1eb0e0a128"
+    },
+    {
+      "start": 307,
+      "end": 312,
+      "target": "docs/features/authentication.md",
+      "sha256": "11cf116d79bf29bd0b07ee717c20d4fd29895ecc4a433fee9d7c29004a1e7875"
+    },
+    {
+      "start": 313,
+      "end": 328,
+      "target": "docs/features/cloud-platform.md",
+      "sha256": "b7559dec3cf0f8533f8f8320e5dc9678ea0f06ad9b186cb8d98bc09929c41d1c"
+    },
+    {
+      "start": 329,
+      "end": 351,
+      "target": "docs/development/team.md",
+      "sha256": "35bf61ce3973faf0568db6ee96e43424cd9ac092c9d66a51a5c6a58627cd0da5"
+    },
+    {
+      "start": 352,
+      "end": 363,
+      "target": "docs/architecture/decisions.md",
+      "sha256": "dd4c505803f6420363e98895a2add58bcc951cf1a22db118bb8c38a7e42c766b"
+    },
+    {
+      "start": 364,
+      "end": 414,
+      "target": "docs/validation/acceptance.md",
+      "sha256": "8e200376f48e9732265b065a8b9990b9e7037bff1e001c155d3e49ddae8a9fd1"
+    },
+    {
+      "start": 415,
+      "end": 424,
+      "target": "docs/product/optional.md",
+      "sha256": "21d539a96a6253e45612babb206548de12f984a8fe740343281ca92308cf1229"
+    },
+    {
+      "start": 425,
+      "end": 439,
+      "target": "docs/validation/evaluation.md",
+      "sha256": "d910b005833aae1a88de3692b012ea7602c94cd6baece6b79a716fe3517975d4"
+    },
+    {
+      "start": 440,
+      "end": 498,
+      "target": "docs/project/submission.md",
+      "sha256": "87f415adf2623cb82342e71dfc95728bb7af92f98b8e69897d8ecdd6c81f8904"
+    },
+    {
+      "start": 499,
+      "end": 547,
+      "target": "docs/research/sources.md",
+      "sha256": "f4c28178348644871b43aef58f0a6f57f9d64fdf3e080f9ad1fdcb0ad58873e5"
+    },
+    {
+      "start": 548,
+      "end": 560,
+      "target": "docs/development/decisions.md",
+      "sha256": "c6635a7b186c9a1ff2268b59b7f73b3d1a517ccc8d2ce960ad99f56394251864"
+    },
+    {
+      "start": 561,
+      "end": 575,
+      "target": "docs/development/workflow.md",
+      "sha256": "1197d4d7618e349d232dda044e274217b0c468d60097de1c6142fe6cd864994e"
+    }
+  ],
+  "sections": [
+    {
+      "number": 0,
+      "heading": "0. 誰のための何を作るか（最新の決定・優先）"
+    },
+    {
+      "number": 1,
+      "heading": "1. 今回作る範囲と主作業"
+    },
+    {
+      "number": 2,
+      "heading": "2. 画面遷移と中核の操作"
+    },
+    {
+      "number": 3,
+      "heading": "3. データ構造と状態遷移"
+    },
+    {
+      "number": 4,
+      "heading": "4. APIとGeminiの契約"
+    },
+    {
+      "number": 5,
+      "heading": "5. Google Cloud構成"
+    },
+    {
+      "number": 6,
+      "heading": "6. 役割・結合点・日程"
+    },
+    {
+      "number": 7,
+      "heading": "7. 技術選定のpros / cons"
+    },
+    {
+      "number": 8,
+      "heading": "8. 検証とデモの合格条件"
+    },
+    {
+      "number": 9,
+      "heading": "9. 追加アイデアの「あれば枠」"
+    },
+    {
+      "number": 10,
+      "heading": "10. 評価基準8項目との対応"
+    },
+    {
+      "number": 11,
+      "heading": "11. ハッカソン共通要件・提出条件（採択時の確認記録）"
+    },
+    {
+      "number": 12,
+      "heading": "12. 実装判断に使う出典・参考例"
+    },
+    {
+      "number": 13,
+      "heading": "13. 設計変更の反映状況"
+    },
+    {
+      "number": 14,
+      "heading": "14. 更新の手順と履歴の扱い"
+    }
+  ]
+}

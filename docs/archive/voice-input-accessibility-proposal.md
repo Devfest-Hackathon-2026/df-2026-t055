@@ -1,3 +1,10 @@
+---
+type: Historical Record
+title: 設計変更案：すべてのテキスト入力欄で音声入力を使えるようにする（a11y）
+authority: historical
+status: deprecated
+---
+
 # 設計変更案：すべてのテキスト入力欄で音声入力を使えるようにする（a11y）
 
 提案日：2026年11月7日。

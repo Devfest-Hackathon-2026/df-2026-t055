@@ -1,3 +1,10 @@
+---
+type: Runbook
+title: Cloud Tasks による生成配送
+authority: operational
+status: stable
+---
+
 # Cloud Tasks による生成配送
 
 この実装は先行するFirestore・Cloud Storage・VertexのPRに依存する。APIはジョブを永続化してからCloud Tasksに投入する。投入が失敗してもジョブを残し、別途設定するCloud Schedulerからgeneratorの復旧エンドポイントを定期実行して再投入する。Schedulerが停止すると投入失敗や配送回数を使い切ったジョブは自動復旧しないため、Schedulerの実行失敗とキュー滞留を監視する。
