@@ -187,8 +187,10 @@ Firestore Native modeに構造化データ、非公開Cloud Storageに動画・�
 - 生成ジョブ：`queued → running → succeeded | failed`。Cloud Tasksの再配送は同じジョブを検査し、成功済みなら終了。実行中はリースを使い、切れたリースだけを取り直す。試行上限は3回。
 - 下書き：AI生成は`generating → editing → approved`、生成失敗は`generating → failed`。承認版から手作業用にコピーすると、新しいdraftIdをeditingで作る。承認時に編集を閉じる。再生成も別draftIdとし、旧下書きと承認版を保存する。
 - 承認処理：版専用の画像を先に用意し、トランザクションで下書きrevision・確認欄を検査してrelease作成とdraftのapproved化を同時実行する。競合は409。失敗して残った画像は職員にも本人にも配信せず、保管期限で消す。[Firestoreのトランザクション仕様](https://cloud.google.com/firestore/native/docs/manage-data/transactions)
-- セッション：`active → waiting_help → active`、`active | waiting_help → stopped`、`active → completed`。`stopped`と`completed`は終端。停止の再送は成功扱いとし、停止後の進行イベントは409で拒否する。再開は担当職員の「対応を終えてつづける」、または対応完了後の本人の「つづける」で行う。再開時はactiveSupportRequestIdを外し、版と工程は保つ。
+- セッション：`active → waiting_help → active`、`active | waiting_help → stopped`、`active → completed`、`completed → stopped`（stopイベントのみ）。`completed`はstop以外の進行イベントに対して終端とし、新たな進行イベントは409で拒否する。本人の「やめる」は常に優先し、完了後に遅延到着したstopも受け付ける。stopとcompleteが競合した場合も、最終状態はstoppedとする。`stopped`は終端とし、停止の再送は成功扱い、停止後の進行イベントは409で拒否する。再開は担当職員の「対応を終えてつづける」、または対応完了後の本人の「つづける」で行う。再開時はactiveSupportRequestIdを外し、版と工程は保つ。
 - 支援要求：`help` は `open → assigned → in_progress → acknowledged`（未担当・担当決定・対応中・対応完了）、`stop` は `open → acknowledged`（停止通知の確認）。担当決定はトランザクションで行う。担当職員だけがhelpの開始・完了・職員側からの再開を操作できる。同じ職員の担当決定・開始・完了の再送では元の職員と時刻を保つ。記録の入力や生成の状態は要求と分ける。
+
+完了の記録とセッションの現在状態は区別する。受理済みのcompleteイベントは`sessionEvents`の履歴に残し、後からstopを受け付けても削除・変更しない。遅延stopの到着後も完了記録を履歴から参照できるが、セッションの現在状態は`stopped`とする。
 
 Cloud Storageは`source/{orgId}/{taskId}/...`、`draft/{orgId}/{draftId}/...`、`approved/{orgId}/{releaseId}/...`に分ける。本人へ配信するのは、次回用に割り当てられた版または本人のセッションに固定された版の承認画像・音声。元動画は職員と、その承認版を読む新人に配信する。新人には承認済み区間のリンクを付ける。
 
