@@ -437,12 +437,29 @@ test('stopが競合に勝ち、next/resume再送でも再開しない・complete
         { clientEventId: `n${i}`, expectedRevision: i, type: 'next' },
         'learner-a',
       );
-    await h.ok(
+    const completed = await h.ok(
       `/me/sessions/${fresh.sessionId}/events`,
       'POST',
       { clientEventId: 'complete', expectedRevision: 8, type: 'complete' },
       'learner-a',
     );
+    assert.equal(completed.status, 'completed');
+    const completionEvent = h.db
+      .all('sessionEvents')
+      .find((e) => e.sessionId === fresh.sessionId && e.type === 'complete');
+    assert.ok(completionEvent);
+    for (const type of ['next', 'back', 'help', 'resume', 'complete'])
+      assert.equal(
+        (
+          await h.request(
+            `/me/sessions/${fresh.sessionId}/events`,
+            'POST',
+            { clientEventId: `after-complete-${type}`, expectedRevision: completed.revision, type },
+            'learner-a',
+          )
+        ).status,
+        409,
+      );
     const late = await h.ok(
       `/me/sessions/${fresh.sessionId}/events`,
       'POST',
@@ -450,6 +467,11 @@ test('stopが競合に勝ち、next/resume再送でも再開しない・complete
       'learner-a',
     );
     assert.equal(late.status, 'stopped');
+    assert.equal(
+      (await h.ok(`/me/sessions/${fresh.sessionId}`, 'GET', undefined, 'learner-a')).status,
+      'stopped',
+    );
+    assert.deepEqual(h.db.get('sessionEvents', completionEvent.id), completionEvent);
     assert.equal(h.db.all('supportRequests').filter((q) => q.kind === 'stop').length, 2);
     const concurrent = await h.session(taskId);
     await Promise.all([

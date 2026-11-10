@@ -289,45 +289,48 @@ test('generator shares the port; lease/failed result retry without repeating mod
   assert.equal((await h.db.get('generationJobs', 'job'))!.attempt, 1);
   assert.equal((await h.db.get('drafts', 'draft'))!.status, 'failed');
 });
-test('two API instances preserve stop over concurrent progress and deduplicate its resend', async () => {
-  const h = await harness();
-  const other = new FirestoreRepository(h.client, 'demo');
-  const apps = [createApp({ db: h.db }).app, createApp({ db: other }).app];
-  await h.db.put(
-    'releases',
-    doc('demo', {
-      id: 'release',
-      learnerId: 'a',
-      learnerSteps: [{ stepId: 's1' }, { stepId: 's2' }],
-    }),
-  );
-  await h.db.put(
-    'sessions',
-    doc('demo', {
-      id: 'session',
-      learnerId: 'a',
-      releaseId: 'release',
-      status: 'active',
-      revision: 0,
-      stepIndex: 0,
-    }),
-  );
-  const event = (index: number, type: string) =>
-    apps[index].fetch(
-      new Request('http://localhost/api/v1/me/sessions/session/events', {
-        method: 'POST',
-        headers: { authorization: 'Bearer learner-a', 'content-type': 'application/json' },
-        body: JSON.stringify({ clientEventId: type, type, expectedRevision: 0 }),
+for (const progress of ['next', 'complete']) {
+  test(`two API instances preserve stop over concurrent ${progress} and deduplicate its resend`, async () => {
+    const h = await harness();
+    const other = new FirestoreRepository(h.client, 'demo');
+    const apps = [createApp({ db: h.db }).app, createApp({ db: other }).app];
+    await h.db.put(
+      'releases',
+      doc('demo', {
+        id: 'release',
+        learnerId: 'a',
+        learnerSteps: [{ stepId: 's1' }, { stepId: 's2' }],
       }),
     );
-  const results = await Promise.all([event(0, 'next'), event(1, 'stop')]);
-  assert.equal(results[1].status, 200);
-  assert.ok([200, 409].includes(results[0].status));
-  const stopped = await h.db.get('sessions', 'session');
-  assert.equal(stopped!.status, 'stopped');
-  assert.equal(stopped!.releaseId, 'release');
-  assert.equal((await event(0, 'stop')).status, 200);
-  assert.equal((await event(0, 'next')).status, 409);
-  assert.deepEqual(await h.db.get('sessions', 'session'), stopped);
-  assert.equal((await h.db.all('sessionEvents')).filter((e) => e.type === 'stop').length, 1);
-});
+    await h.db.put(
+      'sessions',
+      doc('demo', {
+        id: 'session',
+        learnerId: 'a',
+        releaseId: 'release',
+        status: 'active',
+        revision: 0,
+        stepIndex: progress === 'complete' ? 1 : 0,
+      }),
+    );
+    const event = (index: number, type: string) =>
+      apps[index].fetch(
+        new Request('http://localhost/api/v1/me/sessions/session/events', {
+          method: 'POST',
+          headers: { authorization: 'Bearer learner-a', 'content-type': 'application/json' },
+          body: JSON.stringify({ clientEventId: type, type, expectedRevision: 0 }),
+        }),
+      );
+    const results = await Promise.all([event(0, progress), event(1, 'stop')]);
+    assert.equal(results[1].status, 200);
+    assert.ok([200, 409].includes(results[0].status));
+    const stopped = await h.db.get('sessions', 'session');
+    assert.equal(stopped!.status, 'stopped');
+    assert.equal(stopped!.releaseId, 'release');
+    assert.equal((await event(0, 'stop')).status, 200);
+    for (const type of ['next', 'resume', 'complete'])
+      assert.equal((await event(0, type)).status, 409);
+    assert.deepEqual(await h.db.get('sessions', 'session'), stopped);
+    assert.equal((await h.db.all('sessionEvents')).filter((e) => e.type === 'stop').length, 1);
+  });
+}
