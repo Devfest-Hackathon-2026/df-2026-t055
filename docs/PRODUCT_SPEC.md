@@ -6,6 +6,8 @@
 
 ## 0. 誰のための何を作るか（最新の決定・優先）
 
+**プロダクト名は「しごでき」とする。** ブラウザのページタイトルと、職員・本人・新人の各画面に表示するサービス名を統一する。
+
 ### コンセプトと解決する課題
 
 **知的障害のある人が、自分に合う方法で作業手順を確認できるようにするマニュアル作成・共有サービス。** 作業の手本を撮影すると、Geminiが工程や声かけの候補を下書きし、担当者が原動画と照合して修正・承認する。本人には承認済みの作業マニュアルを示し、担当者間では確認済みの教え方・工夫を引き継ぐ。
@@ -145,8 +147,8 @@ MVPは1組織相当のデモ環境、1作業、架空の本人プロフィール
 
 #### 本人画面の配置と文字
 
-- 本人用端末はiPadの横置きを基本とする。作業中は左に工程の写真を大きく、右に現在位置・工程文・注意・読み上げの「きく」・「もどる」「つぎへ」を置く。「手伝って」（左・丸い形）と「やめる」（右・角ばった形）は画面下の帯に固定し、進行ボタンと離す。幅の狭い画面では1列に並べる。
-- 支援待ちの表示は、送信中、受付済みで職員を待っている状態、担当者が決まった状態、対応中、対応完了、送信に失敗して近くの職員を呼ぶ状態を、見出しと絵で分ける。送信待ちのイベントが残る間は、担当決定などの職員側の状態を表示しない。
+- 本人用端末はiPadの横置きを基本とする。作業中は左に工程の写真を大きく、右に現在位置・工程文・注意・読み上げの操作（「読み上げる」「音声をとめる」）・「もどる」「つぎへ」を置く。「手伝って」（左・丸い形）と「やめる」（右・角ばった形）は画面下の帯に固定し、進行ボタンと離す。幅の狭い画面では1列に並べる。
+- 支援待ち・停止・完了の画面では、上記のピクトグラムと文字による状態表示をカードの中に大きく示す。状態の区別と文言は上記の項目に従う。
 - 画面に固定で出る文言（操作ラベル・状態の見出しなど）の漢字にはルビを付ける。工程文・注意・代替テキストは職員が承認した文字列をそのまま表示し、ルビを自動で付けない。本人ごとのルビ・文字サイズの設定はMVPで採用しない（第12節）。
 
 ### 新人：教え方を引き継ぐ
@@ -193,12 +195,16 @@ Firestore Native modeに構造化データ、非公開Cloud Storageに動画・�
 - 生成ジョブ：`queued → running → succeeded | failed`。Cloud Tasksの再配送は同じジョブを検査し、成功済みなら終了。実行中はリースを使い、切れたリースだけを取り直す。試行上限は3回。
 - 下書き：AI生成は`generating → editing → approved`、生成失敗は`generating → failed`。承認版から手作業用にコピーすると、新しいdraftIdをeditingで作る。承認時に編集を閉じる。再生成も別draftIdとし、旧下書きと承認版を保存する。
 - 承認処理：版専用の画像を先に用意し、トランザクションで下書きrevision・確認欄を検査してrelease作成とdraftのapproved化を同時実行する。競合は409。失敗して残った画像は職員にも本人にも配信せず、保管期限で消す。[Firestoreのトランザクション仕様](https://cloud.google.com/firestore/native/docs/manage-data/transactions)
-- セッション：`active → waiting_help → active`、`active | waiting_help → stopped`、`active → completed`。`stopped`と`completed`は終端。停止の再送は成功扱いとし、停止後の進行イベントは409で拒否する。再開は担当職員の「対応を終えてつづける」、または対応完了後の本人の「つづける」で行う。再開時はactiveSupportRequestIdを外し、版と工程は保つ。
+- セッション：`active → waiting_help → active`、`active | waiting_help → stopped`、`active → completed`、`completed → stopped`（stopイベントのみ）。`completed`はstop以外の進行イベントに対して終端とし、新たな進行イベントは409で拒否する。本人の「やめる」は常に優先し、完了後に遅延到着したstopも受け付ける。stopとcompleteが競合した場合も、最終状態はstoppedとする。`stopped`は終端とし、停止の再送は成功扱い、停止後の進行イベントは409で拒否する。再開は担当職員の「対応を終えてつづける」、または対応完了後の本人の「つづける」で行う。再開時はactiveSupportRequestIdを外し、版と工程は保つ。
 - 支援要求：`help` は `open → assigned → in_progress → acknowledged`（未担当・担当決定・対応中・対応完了）、`stop` は `open → acknowledged`（停止通知の確認）。担当決定はトランザクションで行う。担当職員だけがhelpの開始・完了・職員側からの再開を操作できる。同じ職員の担当決定・開始・完了の再送では元の職員と時刻を保つ。記録の入力や生成の状態は要求と分ける。
+
+完了の記録とセッションの現在状態は区別する。受理済みのcompleteイベントは`sessionEvents`の履歴に残し、後からstopを受け付けても削除・変更しない。遅延stopの到着後も完了記録を履歴から参照できるが、セッションの現在状態は`stopped`とする。
 
 Cloud Storageは`source/{orgId}/{taskId}/...`、`draft/{orgId}/{draftId}/...`、`approved/{orgId}/{releaseId}/...`に分ける。本人へ配信するのは、次回用に割り当てられた版または本人のセッションに固定された版の承認画像・音声。元動画は職員と、その承認版を読む新人に配信する。新人には承認済み区間のリンクを付ける。
 
-11/14まではデモと提出用URLを維持する。デモ用素材・プロフィール・操作履歴・支援記録・修正履歴と参考メモ・生成時の入力スナップショットは11/15に基盤担当が削除し、公開提出動画はチーム素材だけで構成する。ログにプロンプト本文、動画、プロフィール、支援記録、修正履歴、認証トークンを出さない。音声入力は文字起こしを確認してから保存し、録音を支援記録に含めない。認識方式・送信先・保存方針・費用は導入前に決め、音声入力に失敗しても入力済みの文字を保つ。
+11/14まではデモと提出用URLを維持する。デモ用素材・プロフィール・操作履歴・支援記録・修正履歴と参考メモ・生成時の入力スナップショットは11/15に基盤担当が削除し、公開提出動画はチーム素材だけで構成する。ログにプロンプト本文、動画、プロフィール、支援記録、修正履歴、認証トークンを出さない。音声入力は文字起こしを確認してから保存し、録音を支援記録に含めない。音声入力に失敗しても入力済みの文字を保つ。
+
+**支援記録の音声入力の方式（2026-11-09に [#22](https://github.com/Genk-AI/df-2026-t055/issues/22) で決定。実装は #76）。** 音声入力は支援記録フォームの3項目（`observedDifficulty` / `assistanceGiven` / `improvementSuggestion`）の入力時だけに提供し、担当者が claim → start → 対応 → acknowledge した後の記録入力時に使う。作業セッション中に常時聞き続ける用途には使わない。認識はGoogle Cloud Speech-to-Text V2（`chirp_3`・`ja-JP`）とし、ブラウザはCloud Runの`web-api`（職員認証）へ音声を送り、`web-api`からSpeech-to-Textへ渡して**文字起こしだけ**を返す。ブラウザからSpeech-to-Textへ直接送らず、ブラウザ内蔵のWeb Speech API（SpeechRecognition）は送信先・保存をアプリ側で制御できないため使わない。音声は`web-api`のメモリ上でのみ処理し、Storage・Firestore・ログへ保存しない。保存するのは職員が確認・訂正した文字だけで、既存の`PUT /support-requests/{id}/record`（`expectedRevision`競合検査つき）を使い、`supportRecords`のスキーマは変えない。Chirp 3は`us`/`eu`マルチリージョンのみのため、音声は東京リージョンでは処理しない。マイク許可の拒否・非対応・通信断・タイムアウト・認識失敗・キャンセルでも入力済みの文字を残し、再試行で既存の文字を上書きしない。費用はV2標準 $0.016/分（V2に無料枠なし、1秒単位の切り上げ）で、実装PRにモデルID・リージョン・単価・利用量の確認結果を残す。Speech Adaptation（用語のバイアシング）は今回の採用範囲外とし、デモ期間中に訂正負担を実測してから採否を判断する。
 
 ## 4. APIとGeminiの契約
 
@@ -216,7 +222,7 @@ Cloud Storageは`source/{orgId}/{taskId}/...`、`draft/{orgId}/{draftId}/...`、
 | `GET /learners/{id}/work-guides` / `GET /learners/{id}/work-guides/{taskId}/support-records` | 職員 | 作業別の次回版・未反映件数・生成／確認状態と、対象の本人・作業の支援記録。前者は `{schemaVersion,items:[{taskId,title,assignment,unappliedCount,latestDraft,latestGeneration}]}` を返す。未存在の割当・下書き・生成は `null`。後者は `{schemaVersion,records}` を返し、各記録の `applied` は割当版とその継承元が採用した同一ID・revisionに限りtrueとする。継承元が欠落・循環・別対象の場合は409を返す |
 | `GET /learners/{id}/work-guides/{taskId}/corrections` | 職員 | 同じ所属の対象本人・作業の修正履歴、参考メモ、要約ジョブの状態。保存済みの修正とAIの提案を分けて返す |
 | `POST /tasks/{id}/generations` | 職員 | `{learnerId}` → 202 `{jobId,draftId}`。記録からの改善では `sourceReleaseId, supportInputs:[{recordId, revision, summary}], clientRequestId` も送る。新規生成・改善を合わせて1作業あたり手順下書きの生成試行10回まで |
-| `GET /jobs/{id}` | 職員 | `{kind,status,draftId,errorCode?}`。画面は3秒間隔で取得。下書きの生成状態にはguideのジョブを使う。失敗した改善ジョブには、再試行用に受付時の本人・元版・確認済み要約と記録版を `retryInput` として返す |
+| `GET /jobs/{id}` | 職員 | `{kind,status,draftId,modelId,promptVersion,errorCode?}`。画面は3秒間隔で取得。下書きの生成状態にはguideのジョブを使う。失敗した改善ジョブには、再試行用に受付時の本人・元版・確認済み要約と記録版を `retryInput` として返す |
 | `GET /drafts/{id}` | 職員 | AI原文と編集データを別オブジェクトで返す |
 | `PATCH /drafts/{id}` | 職員 | `{expectedRevision,editedSteps,reviewChecks,displayMode?,audioGuidance?,appliedSupportRecordRefs?,correctionReason?}` → `{revision,reviewChecks}`。内容を変更した場合は第2節の規則で確認チェックを外し、保存後のチェック状態を返す。編集内容の差分があれば修正履歴も保存し、参考メモの生成を非同期で受け付ける。確認チェックだけの変更や、競合で保存できなかった修正からは履歴を作らない |
 | `POST /drafts/{id}/frames` | 職員 | `{frameMs}` → `{imageAssetId}`。サーバーのffmpegで原動画から静止画を切り出す |
@@ -235,6 +241,7 @@ Cloud Storageは`source/{orgId}/{taskId}/...`、`draft/{orgId}/{draftId}/...`、
 | `POST /support-requests/{id}/acknowledge` | 職員 | `{}` → `{status:"acknowledged",acknowledgedAt}`。helpは担当職員が対応完了を記録する。stopは同じ所属の職員が通知を確認する |
 | `POST /support-requests/{id}/resume` | 担当職員 | `{clientRequestId,expectedSessionRevision}` → `{sessionId,status,stepIndex,revision}`。対応中または対応完了のhelpに対し、必要なら対応完了の記録と、対象の呼出しで支援待ちになっているセッションの再開・イベント保存を一つのトランザクションで行う。記録入力は不要。同じキーの再送で再開を重ねない |
 | `GET /support-requests/{id}/record` / `PUT /support-requests/{id}/record` | 職員 | 支援記録の取得／保存。保存は `{expectedRevision,observedDifficulty,assistanceGiven,improvementSuggestion}`。初回は `expectedRevision: 0`。対応開始後から、対応完了後も保存できる |
+| `POST /support-requests/{id}/record/transcriptions` | 職員 | 支援記録欄の音声を文字起こしする（方式は第3節・[#22](https://github.com/Genk-AI/df-2026-t055/issues/22)）。音声はメモリ上でのみ処理し、このAPIは保存しない。`{transcript}`だけを返す。記録への反映は職員が確認・訂正した後に既存の `PUT /support-requests/{id}/record` で行う。認識失敗・非対応・タイムアウトはエラーを返し、ブラウザは入力済みの文字を保つ。エンコーディング形式・最大長・タイムアウト値は #76 の実装で固定してこの表に反映する |
 | `GET /handover/releases` / `GET /handover/releases/{id}` | 職員・新人 | 承認済み一覧／本人手順とstaffGuide |
 | `POST /handover/releases/{id}/read` | 新人 | `{}` → `{readAt}` |
 | `GET /assets/{id}` | 各ロール | 所属・版・用途を検査してメディアをストリーム配信。本人には対象の承認画像・音声だけ |
@@ -297,7 +304,7 @@ Vertex AI経由のGoogle Gen AI SDKを使う。初回生成の入力は非公開
 
 全キー必須、stepsは1〜20件、stepIdは一意。全時刻は`0 <= startMs <= frameMs <= endMs <= durationMs`、工程順はstartMsの昇順とする。短文は40文字、候補文は各200文字、reviewFlagsは各10件・各100文字まで。聞き取れない音声は空文字と理由を返す。Geminiのstatusや承認フィールドは受け取らない。
 
-API側でも同じスキーマ、文字数、時刻、参照先を検査する。違反・空出力・安全フィルターによる停止はジョブfailedとし、本人向けデータを一切作らない。意味の正しさは職員の照合で判断する。モデルID、プロンプト版、生成所要時間、修正件数を記録する。
+API側でも同じスキーマ、文字数、時刻、参照先を検査する。違反・空出力・安全フィルターによる停止はジョブfailedとし、本人向けデータを一切作らない。意味の正しさは職員の照合で判断する。モデルID、プロンプト版、生成所要時間、修正件数を記録する。手順下書きと参考メモの受付は、モデル選択と同じ設定元のID・プロンプト版を保存する。Fakeは `fake-fixture`、Vertexは選択した実モデルIDとし、職員画面のFake表記は保存済みジョブの `modelId` に基づく。生成前のボタンはモデルを断定せず、表示名だけで実Vertex生成の成功とは判定しない。
 
 モデルの具体ID・利用ロケーション・入出力単価は **AI担当が11/8午前にプロジェクトの利用可能モデルと公式料金表で決める**。選定条件は動画・音声入力、構造化JSON、手本1本の成功、予算内のFlash系モデル。決定値を環境設定と検証記録に固定し、失敗時に別モデルへ自動切替しない。
 
@@ -387,6 +394,7 @@ MagnusCardsの機能差は比較担当（検証・提出担当）が11/8午後�
 - **データ境界。** 別所属や本人・新人が職員用のプロフィールや支援記録へアクセスすると拒否される。任意項目を消せること、職員向けの特性や記録が本人用応答とモデル入力に混入しないこと、選択した記録の確認済み要約だけを改善に使用することを確認する。
 - **ピクトグラム。** 本人が「手伝って」と「やめる」の目的と押した後の状態を、文字を読むことに頼らず確かめられるかを見る。小さい画面、拡大、色の見え方、キーボード、スクリーンリーダー、絵の読み込み失敗、通信断で操作を確認する。本人による意味の確認と、支援要求・再開・即時停止・完了の動作確認を分けて記録する。
 - **支援記録と非同期改善。** 同じ工程で繰り返し支援を求めた場合に別々の記録を作れ、後で入力できることを確認する。音声の訂正・失敗、記録未入力のままの再開、改善中に追加・編集された記録、生成失敗と再試行、生成成功と採用の区別を試す。職員の承認と次回版の割当を経て新版を次回だけ使うことを確認する。
+- **支援記録の音声入力。** 認識結果は職員が確認・訂正した後にだけ記録欄へ反映し、反映後も文字入力で続けられる。反映前のキャンセルで欄を変えない。録音はメモリ上でのみ処理し、Storage・Firestore・ログ・`supportRecords`へ保存しない。マイク許可の拒否・非対応・通信断・タイムアウト・認識失敗・キャンセルでも入力済みの文字が残り、再試行で既存の文字を上書きしない。認識だけで保存・承認・再開を実行しない。実装PRにモデルID・リージョン・単価・利用量の確認結果を残す。
 - **手直しの引き継ぎ。** 職員が「はしをそろえる」を「赤い線にあわせる」に直して保存すると、履歴が残り、AIが次回用の参考メモを作る。同じ本人・作業の次回生成では修正が参照され、写真にない目印や本人の能力を補完しない。要約待ち・失敗・生成受付停止でも編集でき、古い要約が新しい修正を上書きしない。別本人・別作業・別所属の履歴が混ざらず、本人・新人から履歴を取得できないこと、承認版と作業中の表示が変わらないことを確認する。
 - **運用負担。** 支援中・支援後の入力、入力忘れ、音声訂正、元動画の再解析が必要になる条件を観察する。生成時間に加え、記録・修正・照合・承認を含む職員の総作業時間を測り、時短は実測結果に基づいて判断する。
 
@@ -549,11 +557,11 @@ UI・説明方法・支援の操作を変更する際は、第12節の調査資�
 
 | PR | 提案 | 扱い |
 | --- | --- | --- |
-| [#7](https://github.com/Devfest-Hackathon-2026/df-2026-t055/pull/7) | [すべてのテキスト入力欄での音声入力](archive/voice-input-accessibility-proposal.md) | 全画面への展開は別レビュー。支援記録での音声入力は第2〜4節を参照 |
+| [#7](https://github.com/Devfest-Hackathon-2026/df-2026-t055/pull/7) | [すべてのテキスト入力欄での音声入力](archive/voice-input-accessibility-proposal.md) | 全画面への展開は別レビュー（本件では保留）。支援記録での音声入力の方式は [#22](https://github.com/Genk-AI/df-2026-t055/issues/22) で決定し、第2〜4・8節に反映。実装は #76 |
 | [#8](https://github.com/Devfest-Hackathon-2026/df-2026-t055/pull/8) | [支援記録から非同期で手順を改善](archive/support-feedback-improvement-proposal.md) | 職員の操作、記録と生成の契約、受入条件を第2〜4・8節に反映 |
 | [#9](https://github.com/Devfest-Hackathon-2026/df-2026-t055/pull/9) | [本人向け操作のピクトグラム](archive/pictogram-controls-proposal.md) | 操作・状態表示と本人による確認を第2・8節に反映 |
 | [#10](https://github.com/Devfest-Hackathon-2026/df-2026-t055/pull/10) | [本人プロフィール登録・写真のみの手順](archive/learner-profile-photo-guidance-proposal.md) | 登録から提示・版固定までを第1〜4・8節に反映 |
-| 本PR（`codex/ui-design-implementation`） | 本人・職員・新人画面のデザイン案（iPad横置き、支援待ちの状態表示、固定文言のルビ） | 本人画面の配置・状態表示・固定文言のルビを第2節に反映。本人ごとのルビ設定と写真サムネイル列は第12節のとおり未採用 |
+| 本PR（`codex/ui-design-implementation`） | 本人・職員・新人画面のデザイン案（iPad横置き、状態表示のカード化、固定文言のルビ） | 本人画面の配置・状態表示の見せ方・固定文言のルビを第2節に反映。状態の判定と文言は既存のピクトグラムの項目（監査U07）に従う。本人ごとのルビ設定と写真サムネイル列は第12節のとおり未採用 |
 
 なお、承認済み短文の **TTS事前生成** は既に設計フリーズ本文にあるP1の「あれば枠」。MVPの中核フローを妨げる場合は追加しない。
 

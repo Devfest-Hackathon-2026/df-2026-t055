@@ -10,10 +10,24 @@ export const badgeIcons: Record<BadgeKind, string> = {
   fail: 'M12 3L22 20H2ZM12 10v5M12 17.5v.5',
 };
 
+// 生の状態値（succeeded など）と、作業一覧の日本語表示（生成完了など）のどちらでも同じ種類を返す。
 export function badgeKindOf(status: string): BadgeKind {
-  if (status === 'failed') return 'fail';
-  if (status === 'succeeded' || status === 'approved' || status === 'ready') return 'ok';
-  if (status === 'queued' || status === 'running' || status === 'generating') return 'progress';
+  if (status === 'failed' || status === '生成失敗') return 'fail';
+  if (
+    status === 'succeeded' ||
+    status === 'approved' ||
+    status === 'ready' ||
+    status === '生成完了'
+  )
+    return 'ok';
+  if (
+    status === 'queued' ||
+    status === 'running' ||
+    status === 'generating' ||
+    status === '生成待ち' ||
+    status === '生成中'
+  )
+    return 'progress';
   return 'wait';
 }
 

@@ -39,6 +39,12 @@ test('状態バッジは色以外に絵の種類が状態ごとに違い、絵�
   assert.equal(badgeKindOf('succeeded'), 'ok');
   assert.equal(badgeKindOf('failed'), 'fail');
   assert.equal(badgeKindOf('running'), 'progress');
+  assert.equal(badgeKindOf('queued'), 'progress');
+  // 作業一覧の日本語表示（cd21807）でも同じ種類になる。
+  assert.equal(badgeKindOf('生成完了'), 'ok');
+  assert.equal(badgeKindOf('生成失敗'), 'fail');
+  assert.equal(badgeKindOf('生成中'), 'progress');
+  assert.equal(badgeKindOf('生成待ち'), 'progress');
 });
 
 test('CSSだけで描く状態バッジも状態ごとに違う絵を持つ', async () => {

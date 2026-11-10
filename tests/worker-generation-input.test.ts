@@ -8,6 +8,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MemoryRepository, seed, doc, type Storage } from '../apps/api/src/adapters.ts';
+import { createApp } from '../apps/api/src/app.ts';
 import { createWorker } from '../apps/generator/src/worker.ts';
 import type { ModelInput, VideoModel } from '../apps/generator/src/model.ts';
 
@@ -143,3 +144,110 @@ test('未設定の下書きは写真と短文・説明方法なしで生成す�
   assert.equal(captured?.displayMode, 'photo_text');
   assert.deepEqual(captured?.confirmedGuidance, []);
 });
+
+for (const confirmed of [true, false]) {
+  test(`履歴0件の初回生成は受付時の${confirmed ? '確認済み設定' : '未確認項目の既定値'}をリース切れの再配送でも使う`, async () => {
+    const db = new MemoryRepository();
+    seed(db);
+    const storage = new TestStorage();
+    const { app } = createApp({ db, storage });
+    async function request(path: string, body: unknown, method = 'POST') {
+      const response = await app.fetch(
+        new Request(`http://localhost/api/v1${path}`, {
+          method,
+          headers: {
+            authorization: 'Bearer staff',
+            ...(body instanceof FormData ? {} : { 'content-type': 'application/json' }),
+          },
+          body: body instanceof FormData ? body : JSON.stringify(body),
+        }),
+      );
+      assert.ok(response.ok, `${method} ${path}: ${response.status}`);
+      return response.json();
+    }
+    const learner = await request('/learners', {
+      displayName: '架空のCさん',
+      ...(confirmed
+        ? {
+            preferences: {
+              sentenceLength: 17,
+              splitHints: '赤い線で区切る',
+              displayMode: 'photo_only',
+            },
+            confirmedGuidance: ['赤い線を目印にする'],
+          }
+        : {}),
+    });
+    const { taskId } = await request('/tasks', { title: 'タオル折り' });
+    const form = new FormData();
+    form.append('video', new Blob([new Uint8Array(video)], { type: 'video/mp4' }), 'fixture.mp4');
+    await request(`/tasks/${taskId}/video`, form);
+    assert.equal(db.all('draftCorrections').length, 0);
+    const { jobId, draftId } = await request(`/tasks/${taskId}/generations`, {
+      learnerId: learner.learnerId,
+    });
+    assert.equal(db.get('generationJobs', jobId)!.status, 'queued');
+
+    const expectedPreferences = {
+      sentenceLength: confirmed ? 17 : 40,
+      splitHints: confirmed ? '赤い線で区切る' : '',
+      audioGuidance: false,
+    };
+    const expectedDisplayMode = confirmed ? 'photo_only' : 'photo_text';
+    const expectedGuidance = confirmed ? ['赤い線を目印にする'] : [];
+    const captured: ModelInput[] = [];
+    const run = createWorker(
+      db,
+      storage,
+      {
+        async generate(input) {
+          captured.push(input);
+          if (captured.length === 1) {
+            // 結果保存前にリースを失った実行を再現し、次の配送で取り直す。
+            db.put('generationJobs', {
+              ...db.get('generationJobs', jobId)!,
+              leaseToken: 'expired',
+              leaseUntil: 0,
+            });
+            throw Error('LEASE_LOST');
+          }
+          return proposal;
+        },
+      },
+      30,
+    );
+    for (const expectedRevision of [1, 2]) {
+      await request(
+        `/learners/${learner.learnerId}`,
+        {
+          expectedRevision,
+          preferences: {
+            sentenceLength: 30 + expectedRevision,
+            splitHints: `変更後${expectedRevision}`,
+            displayMode: confirmed ? 'photo_text' : 'photo_only',
+          },
+          confirmedGuidance: [`変更後の説明${expectedRevision}`],
+        },
+        'PATCH',
+      );
+      await run(jobId);
+      assert.equal(captured.length, expectedRevision);
+      assert.deepEqual(captured.at(-1)!.preferences, expectedPreferences);
+      assert.equal(captured.at(-1)!.displayMode, expectedDisplayMode);
+      assert.deepEqual(captured.at(-1)!.confirmedGuidance, expectedGuidance);
+      assert.equal(captured.at(-1)!.corrections, undefined);
+      assert.equal(
+        db.get('generationJobs', jobId)!.status,
+        expectedRevision === 1 ? 'running' : 'succeeded',
+      );
+    }
+    assert.deepEqual(captured[1], captured[0]);
+    const snapshot = db.get('generationJobs', jobId)!.inputSnapshot;
+    assert.deepEqual(snapshot.preferences, expectedPreferences);
+    assert.deepEqual(snapshot.correctionInputs, []);
+    assert.equal(db.get('drafts', draftId)!.displayMode, expectedDisplayMode);
+    assert.equal(db.get('drafts', draftId)!.status, 'editing');
+    await run(jobId);
+    assert.equal(captured.length, 2);
+  });
+}

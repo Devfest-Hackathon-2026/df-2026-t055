@@ -1,3 +1,4 @@
+import { configuredModelConfig } from '../../generator/src/model-config.ts';
 import { supportWebSocket } from './support-ws.ts';
 import http, { type Request, type Response, type NextFunction } from './http.ts';
 import { uploadVideo } from './upload.ts';
@@ -38,6 +39,7 @@ import {
   supportRequestStatusQuerySchema,
   staffIdentitySchema,
   staffSupportSessionSchema,
+  supportSessionEventResponseSchema,
 } from '../../../packages/shared/src/support.ts';
 import {
   draftCorrectionSchema,
@@ -73,6 +75,7 @@ import {
   initialGuideInputSnapshotSchema,
   correctionContextInputSnapshotSchema,
   improvementRetryInputSchema,
+  generationJobStatusSchema,
 } from '../../../packages/shared/src/generation.ts';
 export class HttpError extends Error {
   constructor(
@@ -127,10 +130,12 @@ export function createApp(
     globalLimit?: number;
     internalToken?: string;
     modelId?: string;
+    promptVersion?: string;
     runJob?: (jobId: string) => Promise<unknown>;
     queue?: GenerationQueue;
   } = {},
 ) {
+  const modelConfig = configuredModelConfig();
   const db = options.db ?? configuredRepository();
   if (!options.db && db instanceof MemoryRepository) seed(db);
   const storage = options.storage ?? configuredStorage();
@@ -312,7 +317,13 @@ export function createApp(
           ...t,
           generationJobs: (await list('generationJobs', res))
             .filter((j) => j.taskId === t.id && j.kind !== 'correction_context')
-            .map((j) => ({ jobId: j.id, draftId: j.draftId, status: j.status })),
+            .map((j) => ({
+              jobId: j.id,
+              draftId: j.draftId,
+              learnerId: j.learnerId,
+              status: j.status,
+              modelId: j.modelId,
+            })),
         })),
       ),
     });
@@ -472,7 +483,7 @@ export function createApp(
           displayMode: learner.preferences.displayMode ?? 'photo_text',
           confirmedGuidance: learner.confirmedGuidance ?? [],
         });
-      } else if (correctionInputs.length) {
+      } else {
         const video = await get('assets', t.videoAssetId, res);
         inputSnapshot = initialGuideInputSnapshotSchema.parse({
           taskId: t.id,
@@ -516,9 +527,9 @@ export function createApp(
         status: 'queued',
         attempt: 0,
         budgetUsed: 1,
-        modelId: options.modelId ?? 'fake-fixture',
-        promptVersion: '1',
-        ...(inputSnapshot ? { inputSnapshot } : {}),
+        modelId: options.modelId ?? modelConfig.modelId,
+        promptVersion: options.promptVersion ?? modelConfig.promptVersion,
+        inputSnapshot,
         ...(improvement ? { clientRequestId: improvement.clientRequestId, requestHash } : {}),
       });
       d.jobId = j.id;
@@ -649,12 +660,20 @@ export function createApp(
         supportInputs: snapshot.supportInputs,
       });
     }
-    send(res, {
-      status: j.status,
-      draftId: j.draftId,
-      errorCode: j.errorCode,
-      ...(retryInput ? { retryInput } : {}),
-    });
+    send(
+      res,
+      generationJobStatusSchema.parse({
+        schemaVersion: '1',
+        jobId: j.id,
+        kind: j.kind,
+        status: j.status,
+        draftId: j.draftId,
+        modelId: j.modelId,
+        promptVersion: j.promptVersion,
+        errorCode: j.errorCode,
+        ...(retryInput ? { retryInput } : {}),
+      }),
+    );
   });
   api.get('/drafts/:id', async (req, res) => {
     staff(res);
@@ -885,8 +904,8 @@ export function createApp(
                 status: 'queued',
                 attempt: 0,
                 budgetUsed: 1,
-                modelId: options.modelId ?? 'fake-fixture',
-                promptVersion: '1',
+                modelId: options.modelId ?? modelConfig.modelId,
+                promptVersion: options.promptVersion ?? modelConfig.promptVersion,
                 inputSnapshot: snapshot.data,
               });
               contextJobId = job.id;
@@ -1165,7 +1184,23 @@ export function createApp(
     if (s.learnerId !== member(res).learnerId) fail(403, 'LEARNER_FORBIDDEN');
     return s;
   };
-  async function dto(s: Doc) {
+  async function sessionStateDto(s: Doc, res: Response) {
+    let support;
+    if (s.status === 'waiting_help') {
+      if (!s.activeSupportRequestId) fail(409, 'HELP_PENDING');
+      const q = own(await get('supportRequests', s.activeSupportRequestId, res), res);
+      if (q.sessionId !== s.id || q.kind !== 'help') fail(409, 'INVALID_STATE');
+      support = { requestId: q.id, status: q.status, revision: q.revision };
+    }
+    return supportSessionEventResponseSchema.parse({
+      schemaVersion: '1',
+      status: s.status,
+      stepIndex: s.stepIndex,
+      revision: s.revision,
+      ...(support ? { support } : {}),
+    });
+  }
+  async function dto(s: Doc, res: Response) {
     const r = await db.get('releases', s.releaseId);
     if (!r || r.orgId !== s.orgId || r.learnerId !== s.learnerId) fail(403, 'RELEASE_FORBIDDEN');
     const release = savedRelease(r);
@@ -1179,15 +1214,12 @@ export function createApp(
       return silent;
     });
     return learnerSessionSchema.parse({
-      schemaVersion: '1',
+      ...(await sessionStateDto(s, res)),
       sessionId: s.id,
       releaseId: release.releaseId,
       displayMode: release.displayMode,
       audioGuidance,
       steps,
-      status: s.status,
-      stepIndex: s.stepIndex,
-      revision: s.revision,
     });
   }
   api.get('/me/assignments', async (req, res) => {
@@ -1212,7 +1244,7 @@ export function createApp(
       const prior = (await list('sessions', res)).find(
         (s) => s.learnerId === m.learnerId && s.clientRequestId === clientRequestId,
       );
-      if (prior) return prior;
+      if (prior) return dto(prior, res);
       const a = (await list('assignments', res)).find(
         (a) => a.learnerId === m.learnerId && a.taskId === taskId,
       );
@@ -1228,13 +1260,17 @@ export function createApp(
         clientRequestId,
       });
       await db.put('sessions', s);
-      return s;
+      return dto(s, res);
     });
-    res.json(await dto(session));
+    res.json(session);
   });
   api.get('/me/sessions/:id', async (req, res) => {
     role(res, 'learner');
-    res.json(await dto(own(await get('sessions', req.params.id, res), res)));
+    res.json(
+      await db.transaction(async () =>
+        dto(own(await get('sessions', req.params.id, res), res), res),
+      ),
+    );
   });
   api.post('/me/sessions/:id/events', async (req, res) => {
     role(res, 'learner');
@@ -1245,10 +1281,10 @@ export function createApp(
         (e) => e.sessionId === s.id && e.clientEventId === input.clientEventId,
       );
       if (s.status === 'stopped') {
-        if (input.type === 'stop') return s;
+        if (input.type === 'stop') return sessionStateDto(s, res);
         fail(409, 'SESSION_STOPPED');
       }
-      if (prior) return s;
+      if (prior) return sessionStateDto(s, res);
       if (input.type !== 'stop') {
         if (s.revision !== input.expectedRevision) fail(409, 'REVISION_CONFLICT');
         if (s.status === 'completed') fail(409, 'SESSION_COMPLETED');
@@ -1316,10 +1352,10 @@ export function createApp(
         await db.put('supportRequests', q);
       }
       await db.put('sessions', s);
-      return s;
+      return sessionStateDto(s, res);
     });
     notifications.publish(member(res).orgId, req.params.id);
-    send(res, { status: result.status, stepIndex: result.stepIndex, revision: result.revision });
+    res.json(result);
   });
   api.get('/staff/me', async (_req, res) => {
     staff(res);

@@ -169,7 +169,11 @@ test('failed initial enqueue leaves a committed job for a later reconciliation',
   const { seed } = await import('../apps/api/src/adapters.ts');
   const db = new MemoryRepository();
   seed(db);
-  db.put('tasks', doc('demo', { id: 'task', status: 'ready' }));
+  db.put(
+    'tasks',
+    doc('demo', { id: 'task', title: '作業', status: 'ready', videoAssetId: 'video' }),
+  );
+  db.put('assets', doc('demo', { id: 'video', kind: 'video', durationMs: 1000 }));
   const app = createApp({
     db,
     queue: {

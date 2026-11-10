@@ -4,6 +4,7 @@
 .learner button{display:inline-flex;align-items:center;justify-content:center;gap:.5em;max-width:100%;min-width:0;width:100%;margin:0;padding:16px;white-space:normal;overflow-wrap:anywhere}
 .learner button span{min-width:0}
 .learner .control-icon{width:1.5em;height:1.5em;flex:none}
+.learner .learner-state{display:flex;align-items:center;justify-content:center;gap:.5em;flex-wrap:wrap;font-size:1.5rem;overflow-wrap:anywhere}
 .learner button:disabled{opacity:1;border:3px dashed currentColor;background:#e5eeea;color:#536e69;cursor:not-allowed}
 .learner .controls,.learner .safety{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
 .learner{padding-bottom:16em}.learner .safety{position:fixed;bottom:0;margin:0}
@@ -23,7 +24,8 @@ rt{font-size:.45em;font-weight:400}
 .learner .help{background:var(--help-bg);border:4px solid var(--help-edge);color:var(--help-ink);border-radius:999px}
 .learner .stop{background:var(--stop-bg);border:4px solid var(--stop-edge);color:#fff;border-radius:10px}
 .learner .safety button:disabled{border:4px dashed currentColor}
-.learner .listen{background:#fff;border:3px solid var(--btn);color:var(--btn);min-height:84px;font-size:30px}
+/* 読み上げ操作（main 側の audio＋button）を写真の右側で大きく見せる。 */
+.learner .work-side audio+button{background:#fff;border:3px solid var(--btn);color:var(--btn);min-height:84px;font-size:30px}
 .learner .work{background:transparent;border:0;box-shadow:none;padding:0}
 .learner .work-photo{background:var(--photo-bg);border-radius:20px;overflow:hidden;min-height:200px}
 .learner .work-photo img,.learner .work-photo video{max-height:none;height:100%;object-fit:contain;background:var(--photo-bg);border-radius:20px}
@@ -31,20 +33,23 @@ rt{font-size:.45em;font-weight:400}
 .learner .position b{font-size:2.4rem}
 .learner .step-text{margin:0 0 16px;padding:20px 24px;background:#fff;border:2px solid var(--card-edge);border-radius:16px;font-size:1.9rem;line-height:1.7;font-weight:700;text-align:left}
 .learner .caution{margin:0 0 16px;font-size:1.3rem;color:var(--sub)}
-.learner .work-side .listen,.learner .work-side .controls{margin-top:12px}
+.learner .work-side .learner-state{justify-content:flex-start;margin:0 0 12px;color:var(--sub)}
+.learner .work-side audio+button,.learner .work-side .controls{margin-top:12px}
 .learner .wait{text-align:center;background:var(--wait-bg);border:3px solid var(--help-edge)}
-.learner .wait-icon{width:160px;height:160px;color:var(--help-ink)}
+.learner .wait h1.learner-state,.learner .result h1.learner-state{flex-direction:column;gap:12px}
+.learner .wait h1.learner-state{font-size:2rem}
+.learner .wait h1.learner-state .control-icon{width:160px;height:160px;color:var(--help-ink)}
 .learner .wait-note{font-size:2rem;font-weight:700;margin:8px 0 20px}
 .learner .wait-strong{background:var(--help-bg);border:4px solid var(--help-edge);border-radius:12px;padding:16px}
 .learner .wait-failed{background:#fff;border:5px dotted var(--ink)}
 .learner .wait-claimed{background:var(--ok-bg);border:3px solid var(--btn)}
-.learner .wait-claimed .wait-icon{color:var(--btn)}
+.learner .wait-claimed h1.learner-state .control-icon{color:var(--btn)}
 .learner .result{background:transparent;border:0;box-shadow:none;padding:0}
 .learner .result-main{text-align:center}
 .learner .result h1{font-size:3.5rem}
-.learner .stop-icon{width:200px;height:200px;color:var(--stop-bg)}
-.learner .done-icon{width:200px;height:200px;margin:0 auto;border:6px solid var(--btn);background:var(--done-bg);border-radius:50%;color:var(--btn);display:flex;align-items:center;justify-content:center}
-.learner .done-icon svg{width:60%;height:60%}
+.learner .result-stop h1.learner-state .control-icon{width:200px;height:200px;color:var(--stop-bg)}
+.learner .result-done h1.learner-state .control-icon{width:200px;height:200px;padding:40px;border:6px solid var(--btn);background:var(--done-bg);border-radius:50%;color:var(--btn)}
+.learner .next-card .learner-state{font-size:1.3rem}
 .learner .next-card{background:#fff;border:2px solid var(--card-edge);border-radius:16px;padding:24px;text-align:center}
 .learner .next-label{margin:0;color:var(--sub);font-size:1.4rem;font-weight:700}
 .learner .next-text{margin:8px 0 16px;font-size:2rem;font-weight:700}

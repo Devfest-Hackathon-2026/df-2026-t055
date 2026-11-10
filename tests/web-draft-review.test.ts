@@ -27,15 +27,35 @@ export function useEffect(fn,deps){const i=cursor++;if(!state[i]||deps.some((v,j
 export async function flush(){for(const fn of effects)fn();await new Promise(r=>setImmediate(r));}`;
 const hookUrl = 'data:text/javascript;base64,' + Buffer.from(hookSource).toString('base64');
 const hooks = await import(hookUrl);
+// 職員画面の状態バッジ（status-badge.tsx）も実物を読み込む。
+const badgeUrl =
+  'data:text/javascript;base64,' +
+  Buffer.from(
+    ts
+      .transpileModule(
+        await readFile(new URL('../apps/web/src/status-badge.tsx', import.meta.url), 'utf8'),
+        {
+          compilerOptions: {
+            jsx: ts.JsxEmit.React,
+            target: ts.ScriptTarget.ES2022,
+            module: ts.ModuleKind.ESNext,
+          },
+        },
+      )
+      .outputText.replace("'react'", JSON.stringify(import.meta.resolve('react'))),
+  ).toString('base64');
 let source = await readFile(new URL('../apps/web/src/main.tsx', import.meta.url), 'utf8');
 source =
+  source.slice(source.indexOf('function Staff('), source.indexOf('function Draft(')) +
+  '\nexport ' +
   source.slice(source.indexOf('function Draft('), source.indexOf('\nfunction Handover(')) +
   '\nexport ' +
   source.slice(source.indexOf('function Handover('), source.indexOf('\nfunction Learner('));
 source = `import React, {useState,useEffect,useRef} from ${JSON.stringify(hookUrl)};
-import {missingDraftChecks,draftPreviewMode,savedDraftReview} from ${JSON.stringify(new URL('../apps/web/src/draft-review.ts', import.meta.url).href)};
+import {missingDraftChecks,draftPreviewMode,savedDraftReview,generationFailureReason} from ${JSON.stringify(new URL('../apps/web/src/draft-review.ts', import.meta.url).href)};
 import {isManualDraft,releaseCopySource,beginReleaseCopy} from ${JSON.stringify(new URL('../apps/web/src/release-copy.ts', import.meta.url).href)};
-import {releaseCopyResponseSchema,improvementRetryInputSchema} from ${JSON.stringify(new URL('../packages/shared/src/index.ts', import.meta.url).href)};
+import {releaseCopyResponseSchema,improvementRetryInputSchema,generationJobStatusSchema} from ${JSON.stringify(new URL('../packages/shared/src/index.ts', import.meta.url).href)};
+import {StatusBadge,badgeKindOf} from ${JSON.stringify(badgeUrl)};
 const ImprovementReview=()=>null;
 const api=(...args)=>globalThis.draftApi(...args); const go=(path)=>globalThis.draftGo?.(path); const Asset=()=>null;
 export ${source}`;
@@ -46,7 +66,7 @@ const compiled = ts.transpileModule(source, {
     module: ts.ModuleKind.ESNext,
   },
 }).outputText;
-const { Draft, Handover } = await import(
+const { Staff, Draft, Handover } = await import(
   'data:text/javascript;base64,' + Buffer.from(compiled).toString('base64')
 );
 function nodes(tree: any): any[] {
@@ -63,7 +83,7 @@ function button(tree: any, label: string) {
   return nodes(tree).find((n) => n.type === 'button' && text(n) === label);
 }
 
-function harness(overrides: Record<string, unknown> = {}) {
+function harness(overrides: Record<string, unknown> = {}, job: Record<string, unknown> = {}) {
   hooks.reset();
   const step = {
     stepId: 'one',
@@ -88,6 +108,7 @@ function harness(overrides: Record<string, unknown> = {}) {
     revision: 1,
     status: 'editing',
     taskId: 'task',
+    jobId: 'job',
     learnerId: 'a',
     editedSteps: [step],
     reviewChecks: checks,
@@ -108,6 +129,7 @@ function harness(overrides: Record<string, unknown> = {}) {
     },
     draftApi: async (url: string, method = 'GET', body?: any) => {
       calls.push({ url, method, body });
+      if (method === 'GET' && url === '/jobs/job') return structuredClone(job);
       if (method === 'GET' && url === '/handover/releases')
         return { releases: [{ releaseId: 'source', title: '作業', version: 1 }] };
       if (method === 'GET' && url === '/handover/releases/source')
@@ -176,6 +198,78 @@ async function open(h: ReturnType<typeof harness>) {
   await hooks.flush();
   return h.render();
 }
+
+for (const [errorCode, reason] of [
+  ['MODEL_OUTPUT_INVALID', 'AIの出力が必要な形式や条件を満たしませんでした。'],
+  ['MODEL_TIMEOUT', 'AIからの応答が制限時間内に返りませんでした。'],
+  ['MODEL_CALL_FAILED', 'AIへの生成依頼に失敗しました。'],
+  ['FRAME_EXTRACTION_FAILED', '手本動画から写真を切り出せませんでした。'],
+  ['JOB_TIMEOUT', '生成処理が制限時間を超えました。'],
+  ['ATTEMPT_LIMIT', 'このジョブの実行回数が上限に達しました。'],
+  ['GENERATION_FAILED', '生成処理を完了できませんでした。'],
+  ['private provider exception / private generated output', '生成処理を完了できませんでした。'],
+  ['__proto__', '生成処理を完了できませんでした。'],
+]) {
+  test(`failed draft displays only the safe reason for ${errorCode}`, async () => {
+    const h = harness({
+      status: 'failed',
+      jobId: 'failed-job',
+      aiProposal: { steps: [], reviewFlags: [], rawOutput: 'private generated output' },
+      internalException: 'private provider exception',
+    });
+    const request = (globalThis as any).draftApi;
+    Object.assign(globalThis, {
+      draftApi: async (url: string) => {
+        if (url === '/jobs/failed-job')
+          return {
+            schemaVersion: '1',
+            jobId: 'failed-job',
+            draftId: 'draft',
+            kind: 'guide',
+            status: 'failed',
+            errorCode,
+          };
+        return request(url);
+      },
+    });
+    const tree = await open(h);
+    assert.ok(nodes(tree).some((n) => n.props.role === 'alert' && text(n).includes(reason)));
+    assert.doesNotMatch(text(tree), /private|MODEL_|__proto__/);
+    assert.ok(button(tree, '新しいジョブで再試行'));
+  });
+}
+
+test('job fetch and validation failures remain safe and can be fetched again', async () => {
+  for (const mode of ['network', 'schema', 'mismatch']) {
+    const h = harness({ status: 'failed', jobId: 'failed-job' });
+    const request = (globalThis as any).draftApi;
+    let recovered = false;
+    Object.assign(globalThis, {
+      draftApi: async (url: string) => {
+        if (url !== '/jobs/failed-job') return request(url);
+        if (!recovered && mode === 'network') throw Error('private provider exception');
+        return {
+          schemaVersion: '1',
+          jobId: 'failed-job',
+          draftId: !recovered && mode === 'mismatch' ? 'other' : 'draft',
+          kind: 'guide',
+          status: 'failed',
+          errorCode: 'MODEL_TIMEOUT',
+          ...(!recovered && mode === 'schema' ? { rawOutput: 'private generated output' } : {}),
+        };
+      },
+    });
+    let tree = await open(h);
+    assert.match(text(tree), /失敗理由を取得できませんでした/);
+    assert.doesNotMatch(text(tree), /private|MODEL_|制限時間内/);
+    recovered = true;
+    button(tree, '再取得').props.onClick();
+    await settle();
+    tree = h.render();
+    assert.match(text(tree), /AIからの応答が制限時間内に返りませんでした/);
+    assert.doesNotMatch(text(tree), /失敗理由を取得できませんでした/);
+  }
+});
 
 test('review helpers list missing steps and flags, default mode, and validate server response', () => {
   const h = harness();
@@ -615,7 +709,15 @@ test('failed improvement retry keeps source and summaries, and reuses its new re
     draftApi: async (url: string, method = 'GET', body?: any) => {
       if (url === '/drafts/draft') return { draft: h.server };
       if (url === '/tasks/task') return { task: {} };
-      if (url === '/jobs/failed-job') return { status: 'failed', draftId: 'draft', retryInput };
+      if (url === '/jobs/failed-job')
+        return {
+          schemaVersion: '1',
+          jobId: 'failed-job',
+          kind: 'guide',
+          status: 'failed',
+          draftId: 'draft',
+          retryInput,
+        };
       if (method === 'POST') {
         posts.push(body);
         if (posts.length === 1) throw Error('network');
@@ -663,6 +765,9 @@ test('failed improvement retry shows conflict and reselect path without falling 
       if (url === '/tasks/task') return { task: {} };
       if (url === '/jobs/failed-job')
         return {
+          schemaVersion: '1',
+          jobId: 'failed-job',
+          kind: 'guide',
           status: 'failed',
           draftId: 'draft',
           retryInput: {
@@ -703,7 +808,14 @@ test('missing retry snapshot never falls back to creating an initial generation'
     draftApi: async (url: string, method = 'GET', body?: any) => {
       if (url === '/drafts/draft') return { draft: h.server };
       if (url === '/tasks/task') return { task: {} };
-      if (url === '/jobs/failed-job') return { status: 'failed', draftId: 'draft' };
+      if (url === '/jobs/failed-job')
+        return {
+          schemaVersion: '1',
+          jobId: 'failed-job',
+          kind: 'guide',
+          status: 'failed',
+          draftId: 'draft',
+        };
       if (method === 'POST') posts.push(body);
       throw Error('unexpected');
     },
@@ -724,6 +836,15 @@ test('initial generation retry remains an initial request', async () => {
     draftApi: async (url: string, method = 'GET', body?: any) => {
       if (url === '/drafts/draft') return { draft: h.server };
       if (url === '/tasks/task') return { task: {} };
+      if (url === '/jobs/failed-job')
+        return {
+          schemaVersion: '1',
+          jobId: 'failed-job',
+          kind: 'guide',
+          status: 'failed',
+          draftId: 'draft',
+          errorCode: 'MODEL_TIMEOUT',
+        };
       if (method === 'POST') {
         posts.push(body);
         return { jobId: 'next', draftId: 'next-draft' };
@@ -735,4 +856,111 @@ test('initial generation retry remains an initial request', async () => {
   button(tree, '新しいジョブで再試行').props.onClick();
   await settle();
   assert.deepEqual(posts, [{ learnerId: 'a' }]);
+});
+
+test('候補のFake表記は保存済みジョブのmodelIdだけを使い、表示名や認証方式で実生成を断定しない', async () => {
+  for (const modelId of ['fake-fixture', 'gemini-test', undefined]) {
+    const h = harness({}, { modelId, displayName: 'Vertex生成成功' });
+    h.render();
+    await hooks.flush();
+    const content = text(h.render());
+    assert.equal(content.includes('Fake候補'), modelId === 'fake-fixture');
+    assert.equal(content.includes('AIの候補です'), modelId !== 'fake-fixture');
+    assert.doesNotMatch(content, /Vertex生成成功/);
+    assert.ok(h.calls.some((c) => c.url === '/jobs/job'));
+  }
+});
+
+test('生成前のボタンはモデルを断定せず、作業一覧のFake表記は各ジョブのmodelIdに従う', async () => {
+  for (const modelId of ['fake-fixture', 'gemini-test', undefined]) {
+    hooks.reset();
+    Object.assign(globalThis, {
+      draftApi: async (url: string) =>
+        url === '/tasks'
+          ? {
+              tasks: [
+                {
+                  id: 'task',
+                  title: '作業',
+                  status: 'ready',
+                  generationJobs: [
+                    {
+                      jobId: 'job',
+                      draftId: 'draft',
+                      learnerId: 'a',
+                      status: 'succeeded',
+                      modelId,
+                      displayName: 'Vertex生成成功',
+                    },
+                  ],
+                },
+              ],
+            }
+          : { items: [] },
+    });
+    const render = () => {
+      hooks.begin();
+      return Staff({ path: '/staff', action: async (fn: any) => fn() });
+    };
+    render();
+    await hooks.flush();
+    const tree = render();
+    assert.ok(button(tree, 'AIの下書きを作る'));
+    assert.equal(text(tree).includes('開発用Fake'), modelId === 'fake-fixture');
+    assert.doesNotMatch(text(tree), /Vertex生成成功/);
+  }
+});
+
+test('作業一覧は生成状態を日本語で示し、各ジョブの対象本人と下書きを区別する', async () => {
+  hooks.reset();
+  const db = new MemoryRepository();
+  seed(db);
+  db.put('tasks', doc('demo', { id: 'task', title: '作業', status: 'ready' }));
+  const jobs = [
+    { id: 'queued', status: 'queued', learnerId: 'a' },
+    { id: 'running', status: 'running', learnerId: 'b' },
+    { id: 'success-a', status: 'succeeded', learnerId: 'a', modelId: 'fake-fixture' },
+    { id: 'success-b', status: 'succeeded', learnerId: 'b' },
+    { id: 'failed', status: 'failed', learnerId: 'missing-learner' },
+  ];
+  for (const job of jobs)
+    db.put(
+      'generationJobs',
+      doc('demo', { ...job, taskId: 'task', draftId: `draft-${job.id}`, kind: 'guide' }),
+    );
+  const { app } = createApp({ db });
+  let destination = '';
+  Object.assign(globalThis, {
+    draftApi: async (url: string) => {
+      const response = await app.fetch(
+        new Request(`http://localhost/api/v1${url}`, {
+          headers: { authorization: 'Bearer staff' },
+        }),
+      );
+      assert.equal(response.status, 200);
+      return response.json();
+    },
+    draftGo: (path: string) => {
+      destination = path;
+    },
+  });
+  const render = () => {
+    hooks.begin();
+    return Staff({ path: '/staff', action: async (fn: any) => fn() });
+  };
+  render();
+  await hooks.flush();
+  const rows = nodes(render()).filter((n) => n.type === 'p' && text(n).startsWith('生成状態：'));
+  assert.deepEqual(rows.map(text), [
+    '生成状態：生成待ち（対象：Aさん） 下書きを開く',
+    '生成状態：生成中（対象：Bさん） 下書きを開く',
+    '生成状態：生成完了（対象：Aさん）（開発用Fake） 下書きを開く',
+    '生成状態：生成完了（対象：Bさん） 下書きを開く',
+    '生成状態：生成失敗（対象：missing-learner） 下書きを開く',
+  ]);
+  rows.forEach((row, index) => {
+    button(row, '下書きを開く').props.onClick();
+    assert.equal(destination, `/staff/tasks/task/drafts/draft-${jobs[index].id}`);
+  });
+  hooks.reset();
 });
