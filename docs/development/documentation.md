@@ -3,13 +3,35 @@ type: Documentation Policy
 title: 文書の構造と更新手順
 authority: policy
 status: stable
+sources:
+  - id: okf-v0-2
+    resource: https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/0aa870cd87e97bfd9420fb99cc7400bba3f5822f/okf/SPEC.md
+    title: Open Knowledge Format (OKF) Version 0.2（指定元の固定版）
+  - id: okf-canonical-v0-2
+    resource: https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/ad30107c31c06aec8a7d5636e0d1058118604e6f/SPEC.md
+    title: Open Knowledge Format (OKF) Version 0.2（移転先の固定版）
 ---
 
 # 文書の構造と更新手順
 
 実装の正本はdocs内の `authority: normative` を持つ文書群とする。入口は[索引](../index.md)、機能要件は[features](../features/index.md)、横断するデータ・API契約は[contracts](../contracts/index.md)に置く。Issue・PR・コードだけで仕様を上書きしない。仕様と実装が異なる場合は差分を記録して判断を求める。
 
-参考にした[Google Cloudの記事](https://cloud.google.com/blog/ja/products/data-analytics/how-the-open-knowledge-format-can-improve-data-sharing/)と[旧リポジトリ](https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf)は、1概念1ファイル、YAMLフロントマター、Markdownリンク、index.mdによる段階的な参照を説明している。旧リポジトリは移転案内になっているため、形式の詳細は[現在のOKF v0.2仕様](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md)を参照した。このプロジェクトの実装・検証フィールドは独自の拡張であり、OKF自体が定める実装状態ではない。
+## 参照版と適用範囲
+
+文書再編の背景として[Google Cloudの記事](https://cloud.google.com/blog/ja/products/data-analytics/how-the-open-knowledge-format-can-improve-data-sharing/)を参照した。形式の判定には、以下の版を固定した仕様を用いる。
+
+**文書構造はOpen Knowledge Format（OKF）のVersion 0.2（参照表記：`okf@v0.2`）を参考にする。** 指定元の[knowledge-catalog/okf/SPEC.md](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/0aa870cd87e97bfd9420fb99cc7400bba3f5822f/okf/SPEC.md)を、確認日2026-11-10のコミット `0aa870cd87e97bfd9420fb99cc7400bba3f5822f` に固定して参照する。`okf@v0.2` は参照する仕様版の表記であり、Gitタグの存在を示すものではない。[^okf-v0-2]
+
+旧リポジトリの[README](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/0aa870cd87e97bfd9420fb99cc7400bba3f5822f/okf/README.md)は仕様の移転と旧コピーの凍結を案内している。移転先は[open-knowledge-format](https://github.com/GoogleCloudPlatform/open-knowledge-format)であり、同日に確認した[移転先の固定版](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/ad30107c31c06aec8a7d5636e0d1058118604e6f/SPEC.md)（`ad30107c31c06aec8a7d5636e0d1058118604e6f`）もVersion 0.2で、指定元の仕様本文と一致した。今後の更新は移転先で確認し、参照版を変える場合はこの記録と照合結果を更新する。[^okf-canonical-v0-2]
+
+バンドルの範囲は `docs/` とし、1概念1Markdown、YAMLフロントマター、パスによる概念ID、Markdownリンク、`index.md` の段階的な参照、`log.md` の日付別履歴を採用する。ルートの `docs/index.md` に `okf_version: "0.2"` を宣言する。その他の索引にはフロントマターを置かない。構造の基本適合条件と確認範囲は[照合記録](../implementation-audits/20261110-1533-06c89d0.md)を参照する。[^okf-v0-2]
+
+`authority`、`feature_id`、`scope`、`implementation`、`verification`、`verification_scope`、`assessed_commit`、`owner`、`issues`、`code`、`tests`、`evidence`、`gaps` は本プロジェクトの独自拡張。`verification: automated` は機能の記録済み検証範囲を表し、OKFの `verified` による文書の信頼区分とは別に扱う。`authority: normative` や `status: stable` だけで人による確認済み・実装完了と判定しない。
+
+`docs:check` はこのリポジトリの編集規則の検査である。OKFでは任意の `title` 等やディレクトリ索引も、この検査では必須とし、リンク切れや不正な実装状態をエラーにする。任意項目の欠落・未知の型・リンク切れ等を許容するOKF汎用consumerの適合性検査としては使わない。OKFの基本構造への適合と、アプリの機能要件の実装・検証状況を分けて記録する。[^okf-v0-2]
+
+[^okf-v0-2]: Open Knowledge Format Version 0.2、指定元の固定版。§2〜6・§8〜9・§11〜12。
+[^okf-canonical-v0-2]: Open Knowledge Format Version 0.2、移転先の固定版。2026-11-10に指定元との本文一致を確認。
 
 ## 配置と権威
 
