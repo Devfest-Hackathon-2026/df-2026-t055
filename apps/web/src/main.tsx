@@ -329,7 +329,7 @@ function App() {
             go(role === 'staff' ? '/staff' : role === 'newcomer' ? '/handover' : '/me');
           }}
         >
-          てじゅんのバトン
+          しごでき
         </a>
         {authMode === 'demo' ? (
           <>
