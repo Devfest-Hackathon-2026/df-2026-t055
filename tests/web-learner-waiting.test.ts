@@ -46,7 +46,8 @@ function nodes(tree: any): any[] {
 }
 function text(tree: any): string {
   if (Array.isArray(tree)) return tree.map(text).join('');
-  if (React.isValidElement(tree)) return text((tree.props as any).children);
+  if (React.isValidElement(tree))
+    return tree.type === 'rt' ? '' : text((tree.props as any).children);
   return tree == null ? '' : String(tree);
 }
 async function settle() {
@@ -128,7 +129,7 @@ test('再開後に再読み込みしても支援待ちが残らない', async ()
   tree = h.render();
   await hooks.flush();
   tree = h.render();
-  assert.match(text(tree), /職員をよんでいます/);
+  assert.match(text(tree), /職員を よんで います/);
   await h.tick();
   tree = h.render();
   assert.doesNotMatch(text(tree), /職員をよんでいます/);
@@ -188,7 +189,7 @@ test('支援状態を区別し、異なる版・古い通知を無視して同�
     },
   });
   tree = h.render();
-  assert.match(text(tree), /職員をよんでいます/);
+  assert.match(text(tree), /職員が 対応しています/);
   update(6, 2, 'assigned');
   tree = h.render();
   assert.match(text(tree), /職員が対応しています/);
@@ -224,10 +225,10 @@ test('送信待ちの手伝ってが残っている間は待ち表示を解除�
   tree = h.render();
   await hooks.flush();
   tree = h.render();
-  assert.match(text(tree), /職員をよんでいます/);
+  assert.match(text(tree), /まだ とどいて いません/);
   await h.tick();
   tree = h.render();
-  assert.match(text(tree), /職員をよんでいます/);
+  assert.match(text(tree), /まだ とどいて いません/);
   assert.equal(readSafety((globalThis as any).localStorage, h.key).waiting, true);
 });
 
@@ -381,4 +382,25 @@ test('開始応答前に再読込しても同じ開始IDと停止IDで復旧し�
   assert.equal(stop.stopped, true);
   assert.equal(stop.pending[0].clientEventId, 'stop-original');
   assert.match(text(render()), /作業をやめました/);
+});
+
+test('送信待ちがあるあいだは「おくって います」を出し、届いたと読める見出しを出さない', async () => {
+  const h = harness();
+  h.setWaiting([{ clientEventId: 'help-1', expectedRevision: 5, type: 'help' }]);
+  const tree = h.render();
+  assert.match(text(tree), /おくって います/);
+  assert.doesNotMatch(text(tree), /職員が 見ました/);
+  assert.doesNotMatch(text(tree), /対応が 終わりました/);
+});
+
+test('手伝ってボタンの表示にルビが付き、aria-label は付かない', async () => {
+  const h = harness();
+  const tree = h.render();
+  const help = nodes(tree).find((n) => n.type === 'button' && text(n) === '手伝って');
+  assert.ok(help);
+  assert.equal(help.props['aria-label'], undefined);
+  const rts = nodes(help)
+    .filter((n) => n.type === 'rt')
+    .map((n) => n.props.children);
+  assert.deepEqual(rts, ['て', 'つだ']);
 });

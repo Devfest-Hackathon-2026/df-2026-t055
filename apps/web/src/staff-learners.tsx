@@ -175,7 +175,7 @@ export function StaffLearners({
     }
   };
   return (
-    <section>
+    <section className={isEdit && detail ? 'pf-edit' : undefined}>
       <h1 ref={heading} tabIndex={-1}>
         {isEdit
           ? preview
@@ -191,7 +191,7 @@ export function StaffLearners({
       </h1>
       {error && <p role='alert'>{error}</p>}
       {isEdit && detail && (
-        <aside>
+        <aside className='pf-saved'>
           <h2>保存されている値（最新取得時）</h2>
           <ProfileValues profile={detail} />
           <p>
@@ -231,7 +231,7 @@ export function StaffLearners({
             >
               修正へ戻る
             </button>
-            <button disabled={busy || conflict} onClick={() => void submit()}>
+            <button className='primary' disabled={busy || conflict} onClick={() => void submit()}>
               {busy
                 ? isEdit
                   ? '更新しています…'
@@ -262,37 +262,41 @@ export function StaffLearners({
               表示名（必須）
               <input required maxLength={100} {...field('displayName')} />
             </label>
-            {notes.map(([key, label]) => (
-              <label key={key}>
-                {label}（任意・1行1件、各500文字以内、20件まで）
-                <textarea {...notesField(key)} />
+            <div className='pf-notes'>
+              {notes.map(([key, label]) => (
+                <label key={key} className={`pf-note pf-${key}`}>
+                  {label}（任意・1行1件、各500文字以内、20件まで）
+                  <textarea {...notesField(key)} />
+                </label>
+              ))}
+            </div>
+            <div className='pf-prefs'>
+              <label>
+                希望する表示
+                <select {...field('displayMode')}>
+                  <option value=''>未確認</option>
+                  <option value='photo_only'>写真のみ</option>
+                  <option value='photo_text'>写真＋短文</option>
+                </select>
               </label>
-            ))}
-            <label>
-              希望する表示
-              <select {...field('displayMode')}>
-                <option value=''>未確認</option>
-                <option value='photo_only'>写真のみ</option>
-                <option value='photo_text'>写真＋短文</option>
-              </select>
-            </label>
-            <label>
-              短文の長さ（任意・1〜40文字）
-              <input type='number' min={1} max={40} step={1} {...field('sentenceLength')} />
-            </label>
-            <label>
-              音声ガイド
-              <select {...field('audioGuidance')}>
-                <option value=''>未確認</option>
-                <option value='true'>希望する</option>
-                <option value='false'>希望しない</option>
-              </select>
-            </label>
-            <label>
-              表示のヒント（任意・200文字以内）
-              <textarea maxLength={200} {...field('splitHints')} />
-            </label>
-            <fieldset>
+              <label>
+                短文の長さ（任意・1〜40文字）
+                <input type='number' min={1} max={40} step={1} {...field('sentenceLength')} />
+              </label>
+              <label>
+                音声ガイド
+                <select {...field('audioGuidance')}>
+                  <option value=''>未確認</option>
+                  <option value='true'>希望する</option>
+                  <option value='false'>希望しない</option>
+                </select>
+              </label>
+              <label>
+                表示のヒント（任意・200文字以内）
+                <textarea maxLength={200} {...field('splitHints')} />
+              </label>
+            </div>
+            <fieldset className='pf-disability'>
               <legend>障害に関する情報（任意）</legend>
               <p>
                 本人が共有を希望する支援上必要な内容に限ります。記録する場合は3項目すべてを入力してください。
@@ -337,7 +341,7 @@ export function StaffLearners({
                 </>
               )}
             </fieldset>
-            <button type='submit' disabled={busy || conflict}>
+            <button type='submit' className='primary' disabled={busy || conflict}>
               {isEdit ? '更新内容を確認する' : '登録内容を確認する'}
             </button>
           </form>

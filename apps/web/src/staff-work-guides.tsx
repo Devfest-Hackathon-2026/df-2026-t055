@@ -65,33 +65,49 @@ export function StaffWorkGuides({
           {visible.error && <p role='alert'>作業の更新に失敗しました：{visible.error}</p>}
           {!visible.items.length && !visible.error && <p>作業はまだありません。</p>}
           {visible.items.map((item) => (
-            <article key={item.taskId}>
+            <article key={item.taskId} className='guide-card'>
               <h3>{item.title}</h3>
-              <p>次回の版：{item.assignment ? `版 ${item.assignment.version}` : '未割当'}</p>
-              <p>未反映の支援記録：{item.unappliedCount}件</p>
-              <p>
-                生成：
-                {!item.latestGeneration
-                  ? '記録なし'
-                  : item.latestGeneration.status === 'queued' ||
-                      item.latestGeneration.status === 'running'
-                    ? '生成中'
-                    : item.latestGeneration.status === 'failed'
-                      ? '生成失敗'
-                      : '生成完了'}
-              </p>
-              <p>
-                下書き：
-                {!item.latestDraft
-                  ? 'なし'
-                  : item.latestDraft.status === 'generating'
-                    ? '生成中'
-                    : item.latestDraft.status === 'failed'
-                      ? '生成失敗'
-                      : item.latestDraft.status === 'editing'
-                        ? '職員の確認待ち'
-                        : '承認済み'}
-              </p>
+              <div className='guide-facts'>
+                <p>次回の版：{item.assignment ? `版 ${item.assignment.version}` : '未割当'}</p>
+                <p>未反映の支援記録：{item.unappliedCount}件</p>
+                <p>
+                  生成：
+                  {!item.latestGeneration
+                    ? '記録なし'
+                    : item.latestGeneration.status === 'queued' ||
+                        item.latestGeneration.status === 'running'
+                      ? '生成中'
+                      : item.latestGeneration.status === 'failed'
+                        ? '生成失敗'
+                        : '生成完了'}
+                </p>
+                <p>
+                  下書き：
+                  <span
+                    className={`badge badge-css ${
+                      !item.latestDraft
+                        ? 'badge-wait'
+                        : item.latestDraft.status === 'generating'
+                          ? 'badge-progress'
+                          : item.latestDraft.status === 'failed'
+                            ? 'badge-fail'
+                            : item.latestDraft.status === 'editing'
+                              ? 'badge-wait'
+                              : 'badge-ok'
+                    }`}
+                  >
+                    {!item.latestDraft
+                      ? 'なし'
+                      : item.latestDraft.status === 'generating'
+                        ? '生成中'
+                        : item.latestDraft.status === 'failed'
+                          ? '生成失敗'
+                          : item.latestDraft.status === 'editing'
+                            ? '職員の確認待ち'
+                            : '承認済み'}
+                  </span>
+                </p>
+              </div>
               <button onClick={() => setHistory({ learnerId, taskId: item.taskId })}>
                 手直し履歴を見る
               </button>

@@ -194,96 +194,114 @@ export function StaffSupport({
       <h1 ref={heading} tabIndex={-1}>
         支援要求
       </h1>
-      <p role='status'>{realtime ? '通知を受信中' : '通知が切断中です。3秒ごとに確認します。'}</p>
+      <p role='status' className='support-notify'>
+        {realtime ? '通知を受信中' : '通知が切断中です。3秒ごとに確認します。'}
+      </p>
       {error && <p role='alert'>更新または操作に失敗しました：{error}</p>}
       {loading && <p role='status'>読み込み中です</p>}
       {!loading && !error && !items.length && <p>未対応の要求はありません。</p>}
-      {items.map((q) => (
-        <section key={q.requestId}>
-          <h2>
-            {q.kind === 'stop' ? 'やめる' : '手伝って'}：
-            {q.status === 'open'
-              ? '対応待ち'
-              : q.status === 'assigned'
-                ? '担当決定済み'
-                : q.status === 'in_progress'
-                  ? '対応中'
-                  : '対応完了'}
-          </h2>
-          <p>
-            本人：{q.learnerId}／工程：{q.stepId}
-          </p>
-          {q.kind === 'help' && q.status !== 'open' && <p>担当：{q.assignedTo}</p>}
-          {q.kind === 'stop' && q.status === 'open' && (
-            <button disabled={!!busy[q.requestId]} onClick={() => void act(q, 'acknowledge')}>
-              停止を確認した
-            </button>
-          )}
-          {q.kind === 'help' && q.status === 'open' && (
-            <button disabled={!!busy[q.requestId]} onClick={() => void act(q, 'claim')}>
-              担当する
-            </button>
-          )}
-          {q.kind === 'help' && q.status === 'assigned' && q.assignedTo === uid && (
-            <button disabled={!!busy[q.requestId]} onClick={() => void act(q, 'start')}>
-              対応を始める
-            </button>
-          )}
-          {q.kind === 'help' && q.status === 'in_progress' && q.assignedTo === uid && (
-            <button disabled={!!busy[q.requestId]} onClick={() => void act(q, 'acknowledge')}>
-              対応完了だけを記録
-            </button>
-          )}
-          {q.kind === 'help' &&
-            (q.status === 'in_progress' || q.status === 'acknowledged') &&
-            q.assignedTo === uid && (
-              <button
-                ref={(node) => {
-                  recordButtons.current[q.requestId] = node;
-                }}
-                onClick={() => openRecord(q.requestId)}
-              >
-                支援記録を開く
-              </button>
-            )}
-          {q.kind === 'help' &&
-            q.status !== 'open' &&
-            q.assignedTo === uid &&
-            (q.status === 'in_progress' || q.status === 'acknowledged') &&
-            waiting.includes(q.requestId) && (
-              <div>
-                <label>
-                  <input
-                    type='checkbox'
-                    checked={!!confirmed[q.requestId]}
-                    onChange={(e) =>
-                      setConfirmed((old) => ({ ...old, [q.requestId]: e.target.checked }))
-                    }
-                  />
-                  本人に再開の希望を確認しました
-                </label>
-                <button
-                  disabled={!!busy[q.requestId] || !confirmed[q.requestId]}
-                  onClick={() => void act(q, 'resume')}
+      <div className='support-layout'>
+        <div className='support-list'>
+          {items.map((q) => (
+            <section key={q.requestId} className='support-card'>
+              <h2>
+                {q.kind === 'stop' ? 'やめる' : '手伝って'}：
+                <span
+                  className={`badge badge-css ${
+                    q.kind === 'stop'
+                      ? 'badge-fail'
+                      : q.status === 'open'
+                        ? 'badge-wait'
+                        : 'badge-ok'
+                  }`}
                 >
-                  対応を終えてつづける
+                  {q.status === 'open'
+                    ? '対応待ち'
+                    : q.status === 'assigned'
+                      ? '担当決定済み'
+                      : q.status === 'in_progress'
+                        ? '対応中'
+                        : '対応完了'}
+                </span>
+              </h2>
+              <p>
+                本人：{q.learnerId}／工程：{q.stepId}
+              </p>
+              {q.kind === 'help' && q.status !== 'open' && <p>担当：{q.assignedTo}</p>}
+              {q.kind === 'stop' && q.status === 'open' && (
+                <button disabled={!!busy[q.requestId]} onClick={() => void act(q, 'acknowledge')}>
+                  停止を確認した
                 </button>
-              </div>
-            )}
-        </section>
-      ))}
-      {recordIds.map((requestId) => (
-        <SupportRecordForm
-          key={requestId}
-          requestId={requestId}
-          open={!!recordOpen[requestId]}
-          api={api}
-          onClose={() => {
-            setRecordOpen((old) => ({ ...old, [requestId]: false }));
-            (recordButtons.current[requestId] ?? heading.current)?.focus();
-          }}
-        />
-      ))}
+              )}
+              {q.kind === 'help' && q.status === 'open' && (
+                <button disabled={!!busy[q.requestId]} onClick={() => void act(q, 'claim')}>
+                  担当する
+                </button>
+              )}
+              {q.kind === 'help' && q.status === 'assigned' && q.assignedTo === uid && (
+                <button disabled={!!busy[q.requestId]} onClick={() => void act(q, 'start')}>
+                  対応を始める
+                </button>
+              )}
+              {q.kind === 'help' && q.status === 'in_progress' && q.assignedTo === uid && (
+                <button disabled={!!busy[q.requestId]} onClick={() => void act(q, 'acknowledge')}>
+                  対応完了だけを記録
+                </button>
+              )}
+              {q.kind === 'help' &&
+                (q.status === 'in_progress' || q.status === 'acknowledged') &&
+                q.assignedTo === uid && (
+                  <button
+                    ref={(node) => {
+                      recordButtons.current[q.requestId] = node;
+                    }}
+                    onClick={() => openRecord(q.requestId)}
+                  >
+                    支援記録を開く
+                  </button>
+                )}
+              {q.kind === 'help' &&
+                q.status !== 'open' &&
+                q.assignedTo === uid &&
+                (q.status === 'in_progress' || q.status === 'acknowledged') &&
+                waiting.includes(q.requestId) && (
+                  <div>
+                    <label>
+                      <input
+                        type='checkbox'
+                        checked={!!confirmed[q.requestId]}
+                        onChange={(e) =>
+                          setConfirmed((old) => ({ ...old, [q.requestId]: e.target.checked }))
+                        }
+                      />
+                      本人に再開の希望を確認しました
+                    </label>
+                    <button
+                      disabled={!!busy[q.requestId] || !confirmed[q.requestId]}
+                      onClick={() => void act(q, 'resume')}
+                    >
+                      対応を終えてつづける
+                    </button>
+                  </div>
+                )}
+            </section>
+          ))}
+        </div>
+        <div className='support-detail'>
+          {recordIds.map((requestId) => (
+            <SupportRecordForm
+              key={requestId}
+              requestId={requestId}
+              open={!!recordOpen[requestId]}
+              api={api}
+              onClose={() => {
+                setRecordOpen((old) => ({ ...old, [requestId]: false }));
+                (recordButtons.current[requestId] ?? heading.current)?.focus();
+              }}
+            />
+          ))}
+        </div>
+      </div>
     </>
   );
 }
