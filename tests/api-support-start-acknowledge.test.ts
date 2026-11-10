@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { createApp } from '../apps/api/src/app.ts';
 import { MemoryRepository, seed, doc, type Storage } from '../apps/api/src/adapters.ts';
 import { FakeTtsAdapter } from '../apps/api/src/tts.ts';
+import { learnerSessionSchema } from '../packages/shared/src/index.ts';
 import {
+  supportSessionEventResponseSchema,
   supportRecordSchema,
   supportRequestListResponseSchema,
   supportClaimResponseSchema,
@@ -118,8 +120,13 @@ async function harness() {
       'schemaVersion',
       'status',
       'stepIndex',
+      ...(kind === 'help' ? ['support'] : []),
     ]);
-    return db.all('supportRequests').find((q) => q.sessionId === session.sessionId)!;
+    const q = db.all('supportRequests').find((q) => q.sessionId === session.sessionId)!;
+    if (kind === 'help')
+      assert.deepEqual(response.support, { requestId: q.id, status: 'open', revision: 1 });
+    supportSessionEventResponseSchema.parse(response);
+    return q;
   }
   const list = async (query = '', token = 'staff') =>
     supportRequestListResponseSchema.parse(
@@ -133,6 +140,134 @@ async function harness() {
   ) => request(`/support-requests/${requestId}/claim`, 'POST', body, token, status);
   return { db, request, support, list, claim };
 }
+
+test('WSなしでもHTTPでhelp・担当決定・開始・完了を取得でき、本人に非公開情報を返さない', async () => {
+  const h = await harness();
+  const q = await h.support();
+  const path = `/me/sessions/${q.sessionId}`;
+  const session = h.db.get('sessions', q.sessionId)!;
+  h.db.put('supportRequests', { ...q, staffMemo: '本人に返さない職員メモ' });
+  h.db.put('sessions', { ...session, staffMemo: '本人に返さないセッションメモ' });
+  for (const [index, status] of ['open', 'assigned', 'in_progress', 'acknowledged'].entries()) {
+    if (index > 0)
+      await h.request(
+        `/support-requests/${q.id}/${['claim', 'start', 'acknowledge'][index - 1]}`,
+        'POST',
+        {},
+      );
+    if (status === 'in_progress')
+      await h.request(`/support-requests/${q.id}/record`, 'PUT', {
+        expectedRevision: 0,
+        ...recordText,
+      });
+    const loaded = await h.request(path, 'GET', undefined, 'learner-a');
+    learnerSessionSchema.parse(loaded);
+    assert.equal(loaded.status, 'waiting_help');
+    assert.equal(loaded.revision, session.revision);
+    assert.equal(loaded.releaseId, session.releaseId);
+    assert.equal(loaded.stepIndex, session.stepIndex);
+    assert.deepEqual(loaded.support, { requestId: q.id, status, revision: index + 1 });
+    assert.deepEqual(Object.keys(loaded).sort(), [
+      'audioGuidance',
+      'displayMode',
+      'releaseId',
+      'revision',
+      'schemaVersion',
+      'sessionId',
+      'status',
+      'stepIndex',
+      'steps',
+      'support',
+    ]);
+    const event = await h.request(
+      `${path}/events`,
+      'POST',
+      {
+        clientEventId: h.db.get('sessionEvents', q.eventId)!.clientEventId,
+        expectedRevision: 0,
+        type: 'help',
+      },
+      'learner-a',
+    );
+    supportSessionEventResponseSchema.parse(event);
+    assert.deepEqual(event, {
+      schemaVersion: '1',
+      status: loaded.status,
+      stepIndex: loaded.stepIndex,
+      revision: loaded.revision,
+      support: loaded.support,
+    });
+    // セッション開始の再送も現在の同じ支援概要を返す。
+    assert.deepEqual(
+      await h.request(
+        '/me/sessions',
+        'POST',
+        {
+          taskId: 'task',
+          clientRequestId: session.clientRequestId,
+        },
+        'learner-a',
+      ),
+      loaded,
+    );
+  }
+  const resumed = await learnerEvent(h, q.sessionId, 'resume', session.revision);
+  assert.equal(resumed.status, 'active');
+  assert.ok(!('support' in resumed));
+  assert.ok(!('support' in (await h.request(path, 'GET', undefined, 'learner-a'))));
+});
+
+test('支援概要のHTTP取得は本人・所属・要求の対応を検査し、不整合な概要を返さない', async () => {
+  const h = await harness();
+  const q = await h.support();
+  const path = `/me/sessions/${q.sessionId}`;
+  for (const token of ['learner-b', 'staff', 'newcomer', 'other-staff', 'unknown'])
+    await h.request(path, 'GET', undefined, token, token === 'unknown' ? 401 : 403);
+  for (const [fields, status] of [
+    [{ orgId: 'other' }, 403],
+    [{ learnerId: 'b' }, 403],
+    [{ sessionId: 'another-session' }, 409],
+    [{ kind: 'stop' }, 409],
+  ] as const) {
+    h.db.put('supportRequests', { ...q, ...fields });
+    await h.request(path, 'GET', undefined, 'learner-a', status);
+  }
+  const session = h.db.get('sessions', q.sessionId)!;
+  h.db.put('sessions', { ...session, activeSupportRequestId: 'missing' });
+  await h.request(path, 'GET', undefined, 'learner-a', 404);
+  h.db.put('sessions', { ...session, activeSupportRequestId: undefined });
+  await h.request(path, 'GET', undefined, 'learner-a', 409);
+});
+
+test('HTTP GETはセッションと支援要求を同じトランザクションで読む', async () => {
+  const h = await harness();
+  const q = await h.support();
+  const transaction = h.db.transaction.bind(h.db);
+  const get = h.db.get.bind(h.db);
+  let readingSnapshot = false;
+  let snapshots = 0;
+  const reads: string[] = [];
+  h.db.transaction = (fn) =>
+    transaction(async () => {
+      snapshots++;
+      readingSnapshot = true;
+      try {
+        return await fn();
+      } finally {
+        readingSnapshot = false;
+      }
+    });
+  h.db.get = (collection, id) => {
+    if (['sessions', 'supportRequests'].includes(collection)) {
+      assert.equal(readingSnapshot, true);
+      reads.push(collection);
+    }
+    return get(collection, id);
+  };
+  await h.request(`/me/sessions/${q.sessionId}`, 'GET', undefined, 'learner-a');
+  assert.deepEqual(reads, ['sessions', 'supportRequests']);
+  assert.equal(snapshots, 1);
+});
 
 test('helpは担当・開始・完了の順で契約応答と一覧revisionを更新し、再送は保存値を保つ', async () => {
   const h = await harness();
