@@ -1,3 +1,4 @@
+import { configuredModelConfig } from '../../generator/src/model-config.ts';
 import { supportWebSocket } from './support-ws.ts';
 import http, { type Request, type Response, type NextFunction } from './http.ts';
 import { uploadVideo } from './upload.ts';
@@ -129,10 +130,12 @@ export function createApp(
     globalLimit?: number;
     internalToken?: string;
     modelId?: string;
+    promptVersion?: string;
     runJob?: (jobId: string) => Promise<unknown>;
     queue?: GenerationQueue;
   } = {},
 ) {
+  const modelConfig = configuredModelConfig();
   const db = options.db ?? configuredRepository();
   if (!options.db && db instanceof MemoryRepository) seed(db);
   const storage = options.storage ?? configuredStorage();
@@ -314,7 +317,12 @@ export function createApp(
           ...t,
           generationJobs: (await list('generationJobs', res))
             .filter((j) => j.taskId === t.id && j.kind !== 'correction_context')
-            .map((j) => ({ jobId: j.id, draftId: j.draftId, status: j.status })),
+            .map((j) => ({
+              jobId: j.id,
+              draftId: j.draftId,
+              status: j.status,
+              modelId: j.modelId,
+            })),
         })),
       ),
     });
@@ -518,8 +526,8 @@ export function createApp(
         status: 'queued',
         attempt: 0,
         budgetUsed: 1,
-        modelId: options.modelId ?? 'fake-fixture',
-        promptVersion: '1',
+        modelId: options.modelId ?? modelConfig.modelId,
+        promptVersion: options.promptVersion ?? modelConfig.promptVersion,
         inputSnapshot,
         ...(improvement ? { clientRequestId: improvement.clientRequestId, requestHash } : {}),
       });
@@ -659,6 +667,8 @@ export function createApp(
         kind: j.kind,
         status: j.status,
         draftId: j.draftId,
+        modelId: j.modelId,
+        promptVersion: j.promptVersion,
         errorCode: j.errorCode,
         ...(retryInput ? { retryInput } : {}),
       }),
@@ -893,8 +903,8 @@ export function createApp(
                 status: 'queued',
                 attempt: 0,
                 budgetUsed: 1,
-                modelId: options.modelId ?? 'fake-fixture',
-                promptVersion: '1',
+                modelId: options.modelId ?? modelConfig.modelId,
+                promptVersion: options.promptVersion ?? modelConfig.promptVersion,
                 inputSnapshot: snapshot.data,
               });
               contextJobId = job.id;

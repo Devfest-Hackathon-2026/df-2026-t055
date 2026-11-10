@@ -44,6 +44,8 @@ export const generationJobStatusSchema = generationCreateResponseSchema
     kind: z.enum(['guide', 'correction_context']),
     status,
     errorCode,
+    modelId: id.optional(),
+    promptVersion: id.optional(),
     retryInput: improvementRetryInputSchema.optional(),
   })
   .strict();
