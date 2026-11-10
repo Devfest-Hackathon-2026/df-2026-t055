@@ -1742,6 +1742,9 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
         <section>
           <h1 className='learner-state'>{learnerControlContent('おわりました')}</h1>
           <p>職員をよんでください</p>
+          <button className='primary' onClick={() => go('/me')}>
+            {learnerControlContent('おわります')}
+          </button>
         </section>
       ) : session ? (
         <section>
