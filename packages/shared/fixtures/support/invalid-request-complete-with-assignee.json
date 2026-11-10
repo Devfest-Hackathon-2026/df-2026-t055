@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "1",
+  "requestId": "demo-request-complete",
+  "sessionId": "demo-session",
+  "eventId": "demo-event",
+  "learnerId": "a",
+  "stepId": "s2",
+  "revision": 1,
+  "createdAt": "2026-11-08T01:00:00Z",
+  "kind": "complete",
+  "status": "open",
+  "assignedTo": "demo-staff",
+  "assignedAt": "2026-11-08T01:00:00Z"
+}

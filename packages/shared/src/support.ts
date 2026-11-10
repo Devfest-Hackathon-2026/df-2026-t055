@@ -53,6 +53,15 @@ export const supportRequestSchema = z.union([
       ...acknowledged,
     })
     .strict(),
+  z.object({ ...base, kind: z.literal('complete'), status: z.literal('open') }).strict(),
+  z
+    .object({
+      ...base,
+      kind: z.literal('complete'),
+      status: z.literal('acknowledged'),
+      ...acknowledged,
+    })
+    .strict(),
 ]);
 export type SupportRequest = z.infer<typeof supportRequestSchema>;
 export type SupportStatus = z.infer<typeof supportStatusSchema>;
@@ -64,6 +73,7 @@ export const supportTransitions = {
     acknowledged: [],
   },
   stop: { open: ['acknowledged'], assigned: [], in_progress: [], acknowledged: [] },
+  complete: { open: ['acknowledged'], assigned: [], in_progress: [], acknowledged: [] },
 } as const;
 export function canTransitionSupport(
   kind: SupportRequest['kind'],

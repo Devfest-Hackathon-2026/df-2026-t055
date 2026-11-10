@@ -23,7 +23,7 @@ Firestore Native modeに構造化データ、非公開Cloud Storageに動画・�
 | `assignments` | `learnerId, taskId, releaseId, assignedBy, updatedAt` | 次回開始版へのポインタ。承認済みかつ本人ID一致の版だけを指す |
 | `sessions` | `learnerId, releaseId, status, stepIndex, revision, activeSupportRequestId?, startedAt, endedAt?` | 開始時に版を固定。支援待ちでは対象の要求IDを保存する。進行はイベントと同一トランザクションで更新 |
 | `sessionEvents` | `sessionId, clientEventId, type, stepId?, createdBy, receivedAt` | 進行・支援要求・停止・完了を追記。clientEventIdで重複排除 |
-| `supportRequests` | `sessionId, eventId, learnerId, stepId, kind: help / stop, status: open / assigned / in_progress / acknowledged, revision, assignedTo?, assignedAt?, startedBy?, startedAt?, acknowledgedBy?, acknowledgedAt?` | 職員の支援一覧用。担当決定・到着と開始・完了を別々に記録する。状態変更ごとにrevisionを増やす。停止イベントの通知にも使う |
+| `supportRequests` | `sessionId, eventId, learnerId, stepId, kind: help / stop / complete, status: open / assigned / in_progress / acknowledged, revision, assignedTo?, assignedAt?, startedBy?, startedAt?, acknowledgedBy?, acknowledgedAt?` | 職員の支援一覧用。担当決定・到着と開始・完了を別々に記録する。状態変更ごとにrevisionを増やす。停止イベントと完了イベントの通知にも使う。complete は本人が最後の工程で完了を記録した時に、完了イベントと同じトランザクションで作る |
 | `supportRecords` | `supportRequestId, learnerId, taskId, releaseId, stepId, sessionId, observedDifficulty, assistanceGiven, improvementSuggestion, createdBy, updatedBy, updatedAt, revision` | 支援要求ごとに1件。対象IDはサーバーが要求とセッションから確定する。記録の参照は `{recordId, revision}` で行う |
 | `draftCorrections` | `taskId, learnerId, draftId, draftRevision, changes:[{stepId,field,before,after}], reason?, createdBy, contextJobId?, contextSummary?` | 職員が保存した修正を記録する。修正前後の値はサーバーが確定し、履歴を保持する。要約結果はその履歴にだけ保存し、遅く完了した処理で新しい修正を上書きしない |
 | `handoverReads` | `releaseId, newcomerUid, readAt` | 承認版を読んだ記録 |
@@ -44,9 +44,9 @@ Firestore Native modeに構造化データ、非公開Cloud Storageに動画・�
 - 下書き：AI生成は`generating → editing → approved`、生成失敗は`generating → failed`。承認版から手作業用にコピーすると、新しいdraftIdをeditingで作る。承認時に編集を閉じる。再生成も別draftIdとし、旧下書きと承認版を保存する。
 - 承認処理：版専用の画像を先に用意し、トランザクションで下書きrevision・確認欄を検査してrelease作成とdraftのapproved化を同時実行する。競合は409。失敗して残った画像は職員にも本人にも配信せず、保管期限で消す。[Firestoreのトランザクション仕様](https://cloud.google.com/firestore/native/docs/manage-data/transactions)
 - セッション：`active → waiting_help → active`、`active | waiting_help → stopped`、`active → completed`、`completed → stopped`（stopイベントのみ）。`completed`はstop以外の進行イベントに対して終端とし、新たな進行イベントは409で拒否する。本人の「やめる」は常に優先し、完了後に遅延到着したstopも受け付ける。stopとcompleteが競合した場合も、最終状態はstoppedとする。`stopped`は終端とし、停止の再送は成功扱い、停止後の進行イベントは409で拒否する。再開は担当職員の「対応を終えてつづける」、または対応完了後の本人の「つづける」で行う。再開時はactiveSupportRequestIdを外し、版と工程は保つ。
-- 支援要求：`help` は `open → assigned → in_progress → acknowledged`（未担当・担当決定・対応中・対応完了）、`stop` は `open → acknowledged`（停止通知の確認）。担当決定はトランザクションで行う。担当職員だけがhelpの開始・完了・職員側からの再開を操作できる。同じ職員の担当決定・開始・完了の再送では元の職員と時刻を保つ。記録の入力や生成の状態は要求と分ける。
+- 支援要求：`help` は `open → assigned → in_progress → acknowledged`（未担当・担当決定・対応中・対応完了）、`stop` は `open → acknowledged`（停止通知の確認）、`complete` は `open → acknowledged`（完了通知の確認）。stop と complete は担当決定・開始・記録・再開の対象にしない。担当決定はトランザクションで行う。担当職員だけがhelpの開始・完了・職員側からの再開を操作できる。同じ職員の担当決定・開始・完了の再送では元の職員と時刻を保つ。記録の入力や生成の状態は要求と分ける。
 
-完了の記録とセッションの現在状態は区別する。受理済みのcompleteイベントは`sessionEvents`の履歴に残し、後からstopを受け付けても削除・変更しない。遅延stopの到着後も完了記録を履歴から参照できるが、セッションの現在状態は`stopped`とする。
+完了の記録とセッションの現在状態は区別する。受理済みのcompleteイベントは`sessionEvents`の履歴に残し、後からstopを受け付けても削除・変更しない。遅延stopの到着後も完了記録を履歴から参照できるが、セッションの現在状態は`stopped`とする。完了通知の要求（kind: complete）も遅延stopで削除・変更せず、stopの要求を別に作る。
 
 Cloud Storageは`source/{orgId}/{taskId}/...`、`draft/{orgId}/{draftId}/...`、`approved/{orgId}/{releaseId}/...`に分ける。本人へ配信するのは、次回用に割り当てられた版または本人のセッションに固定された版の承認画像・音声。元動画は職員と、その承認版を読む新人に配信する。新人には承認済み区間のリンクを付ける。
 

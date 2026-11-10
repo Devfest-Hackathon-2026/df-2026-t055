@@ -337,6 +337,160 @@ test('stopは担当・開始なしで同じ所属の職員が確認し、再送�
   }
 });
 
+test('completeは完了イベントと同じ保存で要求を1件作り、再送で増やさず一覧に出す', async () => {
+  const h = await harness();
+  const q = await h.support('complete');
+  const session = h.db.get('sessions', q.sessionId)!;
+  assert.equal(session.status, 'completed');
+  assert.ok(!('activeSupportRequestId' in session));
+  const event = h.db
+    .all('sessionEvents')
+    .find((e) => e.sessionId === q.sessionId && e.type === 'complete')!;
+  const ofSession = () => h.db.all('supportRequests').filter((r) => r.sessionId === q.sessionId);
+  assert.deepEqual(
+    ofSession().map((r) => [r.kind, r.status, r.revision, r.eventId, r.learnerId, r.stepId]),
+    [['complete', 'open', 1, event.id, 'a', event.stepId]],
+  );
+  const resent = await h.request(
+    `/me/sessions/${q.sessionId}/events`,
+    'POST',
+    { clientEventId: event.clientEventId, expectedRevision: 0, type: 'complete' },
+    'learner-a',
+  );
+  assert.equal(resent.status, 'completed');
+  assert.ok(!('support' in resent));
+  await h.request(
+    `/me/sessions/${q.sessionId}/events`,
+    'POST',
+    { clientEventId: 'another-complete', expectedRevision: session.revision, type: 'complete' },
+    'learner-a',
+    409,
+  );
+  assert.equal(ofSession().length, 1);
+  assert.equal(h.db.all('sessionEvents').filter((e) => e.sessionId === q.sessionId).length, 1);
+  const listed = (await h.list()).find((r) => r.requestId === q.id)!;
+  assert.deepEqual(listed, {
+    schemaVersion: '1',
+    requestId: q.id,
+    sessionId: q.sessionId,
+    eventId: event.id,
+    learnerId: 'a',
+    stepId: event.stepId,
+    kind: 'complete',
+    status: 'open',
+    revision: 1,
+    createdAt: q.createdAt,
+  });
+  assert.deepEqual(await h.list('?status=open'), [listed]);
+  assert.deepEqual(await h.list('', 'other-staff'), []);
+  for (const token of ['learner-a', 'newcomer'])
+    await h.request('/support-requests', 'GET', undefined, token, 403);
+});
+
+test('completeは担当・開始なしで同じ所属の職員が確認し、再送は時刻を保ち、help限定の操作を拒否する', async () => {
+  const h = await harness();
+  const q = await h.support('complete');
+  const before = h.db.get('supportRequests', q.id);
+  for (const operation of ['claim', 'start'])
+    await h.request(`/support-requests/${q.id}/${operation}`, 'POST', {}, 'staff', 409);
+  await h.request(
+    `/support-requests/${q.id}/resume`,
+    'POST',
+    { clientRequestId: 'resume-complete', expectedSessionRevision: 1 },
+    'staff',
+    409,
+  );
+  await h.request(
+    `/support-requests/${q.id}/record`,
+    'PUT',
+    { expectedRevision: 0, observedDifficulty: '', assistanceGiven: '', improvementSuggestion: '' },
+    'staff',
+    409,
+  );
+  await h.request(`/support-requests/${q.id}/session-state`, 'GET', undefined, 'staff', 403);
+  for (const token of ['learner-a', 'learner-b', 'newcomer', 'other-staff'])
+    await h.request(`/support-requests/${q.id}/acknowledge`, 'POST', {}, token, 403);
+  await h.request(`/support-requests/${q.id}/acknowledge`, 'POST', {}, 'unknown', 401);
+  assert.deepEqual(h.db.get('supportRequests', q.id), before);
+  assert.equal(h.db.all('supportRecords').length, 0);
+  const result = supportAcknowledgeResponseSchema.parse(
+    await h.request(`/support-requests/${q.id}/acknowledge`, 'POST', {}, 'staff-2'),
+  );
+  assert.deepEqual(
+    await h.request(`/support-requests/${q.id}/acknowledge`, 'POST', {}, 'staff-2'),
+    result,
+  );
+  await h.request(`/support-requests/${q.id}/acknowledge`, 'POST', {}, 'staff', 409);
+  for (const operation of ['claim', 'start'])
+    await h.request(`/support-requests/${q.id}/${operation}`, 'POST', {}, 'staff', 409);
+  const stored = h.db.get('supportRequests', q.id)!;
+  assert.equal(stored.acknowledgedBy, 'staff-2');
+  assert.equal(stored.acknowledgedAt, result.acknowledgedAt);
+  assert.deepEqual(await h.list(), []);
+  const listed = (await h.list('?status=acknowledged'))[0];
+  assert.equal(listed.kind, 'complete');
+  assert.equal(listed.status, 'acknowledged');
+  assert.equal(listed.revision, 2);
+  assert.equal(listed.acknowledgedAt, result.acknowledgedAt);
+  for (const field of ['assignedTo', 'assignedAt', 'startedBy', 'startedAt']) {
+    assert.ok(!(field in stored));
+    assert.ok(!(field in listed));
+  }
+  assert.equal(h.db.get('sessions', q.sessionId)!.status, 'completed');
+});
+
+test('完了後のstopは停止を残してstop要求を別に作り、complete要求は変えない', async () => {
+  const h = await harness();
+  const q = await h.support('complete');
+  const completeRequest = h.db.get('supportRequests', q.id);
+  const stopped = await h.request(
+    `/me/sessions/${q.sessionId}/events`,
+    'POST',
+    { clientEventId: 'late-stop', expectedRevision: 0, type: 'stop' },
+    'learner-a',
+  );
+  assert.equal(stopped.status, 'stopped');
+  assert.deepEqual(h.db.get('supportRequests', q.id), completeRequest);
+  const ofSession = h.db.all('supportRequests').filter((r) => r.sessionId === q.sessionId);
+  assert.deepEqual(ofSession.map((r) => [r.kind, r.status]).sort(), [
+    ['complete', 'open'],
+    ['stop', 'open'],
+  ]);
+  assert.deepEqual((await h.list()).map((r) => r.kind).sort(), ['complete', 'stop']);
+  await h.request(`/support-requests/${q.id}/acknowledge`, 'POST', {});
+  assert.equal(h.db.get('sessions', q.sessionId)!.status, 'stopped');
+});
+
+test('stopとcompleteが競合しても最終状態はstoppedで、completeの要求は高々1件', async () => {
+  for (const stopFirst of [true, false]) {
+    const h = await harness();
+    const session = await h.request(
+      '/me/sessions',
+      'POST',
+      { taskId: 'task', clientRequestId: crypto.randomUUID() },
+      'learner-a',
+    );
+    const send = (type: string) =>
+      h.request(
+        `/me/sessions/${session.sessionId}/events`,
+        'POST',
+        { clientEventId: type, expectedRevision: 0, type },
+        'learner-a',
+        [200, 409],
+      );
+    await Promise.all(
+      stopFirst ? [send('stop'), send('complete')] : [send('complete'), send('stop')],
+    );
+    assert.equal(h.db.get('sessions', session.sessionId)!.status, 'stopped');
+    const kinds = h.db
+      .all('supportRequests')
+      .filter((r) => r.sessionId === session.sessionId)
+      .map((r) => r.kind)
+      .sort();
+    assert.deepEqual(kinds, stopFirst ? ['stop'] : ['complete', 'stop']);
+  }
+});
+
 test('開始・確認は認証・職員・所属・空objectを検査する', async () => {
   const h = await harness();
   const q = await h.support();
