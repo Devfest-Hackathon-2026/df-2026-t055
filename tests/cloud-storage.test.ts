@@ -1,4 +1,7 @@
 import { test } from 'node:test';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import assert from 'node:assert/strict';
 import {
   CloudStorage,
@@ -40,6 +43,37 @@ class FakeCloudStorage implements CloudStorageClient {
     return this.put(bucket, to, this.read(from, options.ifSourceGenerationMatch), {
       ifGenerationMatch: options.ifGenerationMatch,
     });
+  }
+  sessions = new Map<string, { bucket: string; path: string; size: number; parts: Buffer[] }>();
+  async startUpload(
+    bucket: string,
+    path: string,
+    size: number,
+    options: { ifGenerationMatch: '0' },
+  ) {
+    assert.deepEqual(options, { ifGenerationMatch: '0' });
+    const session = `https://storage.googleapis.com/upload/storage/v1/b/${bucket}/o?upload_id=${this.sessions.size}`;
+    this.sessions.set(session, { bucket, path, size, parts: [] });
+    return session;
+  }
+  async appendUpload(session: string, start: number, bytes: Buffer, total: number) {
+    const upload = this.sessions.get(session);
+    if (!upload) throw Error('NO_SESSION');
+    const received = Buffer.concat(upload.parts).length;
+    if (start !== received || total !== upload.size) throw Error('BAD_RANGE');
+    upload.parts.push(Buffer.from(bytes));
+    if (received + bytes.length < total) return { received: received + bytes.length };
+    const generation = await this.put(upload.bucket, upload.path, Buffer.concat(upload.parts), {
+      ifGenerationMatch: '0',
+    });
+    return { received: total, generation };
+  }
+  removed: string[] = [];
+  async remove(bucket: string, path: string, options: { ifGenerationMatch: string }) {
+    assert.equal(bucket, 'private-test');
+    this.read(path, options.ifGenerationMatch);
+    this.objects.delete(path);
+    this.removed.push(`${path}#${options.ifGenerationMatch}`);
   }
 }
 const source = 'source/demo/task/video.mp4',
@@ -239,4 +273,39 @@ test('approval and manual draft copy persist the generations returned by cloud s
   assert.ok(image.objectPath.startsWith(`draft/demo/${copy.id}/`));
   assert.equal((await storage.get(image.objectPath, image.generation)).toString(), 'image');
   assert.deepEqual(db.get('releases', release.id), release);
+});
+
+test('resumable upload, pinned delete and file download keep the path and generation rules', async () => {
+  const client = new FakeCloudStorage(),
+    storage = new CloudStorage(client, 'private-test');
+  const session = await storage.startUpload(source, 6);
+  assert.deepEqual(await storage.appendUpload(session, 0, Buffer.from('vid'), 6), {
+    received: 3,
+  });
+  const done = await storage.appendUpload(session, 3, Buffer.from('eo!'), 6);
+  assert.deepEqual(done, { received: 6, generation: '9007199254740993' });
+  const dir = await mkdtemp(join(tmpdir(), 't055-cloud-download-'));
+  try {
+    const file = join(dir, 'video.mp4');
+    await storage.download(source, done.generation, file);
+    assert.equal((await readFile(file)).toString(), 'video!');
+    await assert.rejects(
+      storage.download(source, undefined, join(dir, 'x')),
+      /GENERATION_REQUIRED/,
+    );
+    await assert.rejects(storage.download(source, '1', join(dir, 'y')), /PRECONDITION/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+  await assert.rejects(storage.remove(source), /GENERATION_REQUIRED/);
+  await assert.rejects(storage.remove(source, '1'), /PRECONDITION/);
+  await storage.remove(source, done.generation);
+  assert.deepEqual(client.removed, [`${source}#${done.generation}`]);
+  assert.equal(client.objects.has(source), false);
+  await assert.rejects(storage.startUpload(source, 0), /INVALID_UPLOAD_SIZE/);
+  for (const path of ['outside/demo/task/a', '/' + source, 'source/demo/task/../a']) {
+    await assert.rejects(storage.startUpload(path, 1), /INVALID_STORAGE_PATH/);
+    await assert.rejects(storage.remove(path, '1'), /INVALID_STORAGE_PATH/);
+    await assert.rejects(storage.download(path, '1', '/dev/null'), /INVALID_STORAGE_PATH/);
+  }
 });

@@ -17,6 +17,7 @@ import {
   MemoryRepository,
   seed,
   doc,
+  writeStreamToFile,
   type Storage,
   type Repository,
 } from '../apps/api/src/adapters.ts';
@@ -38,6 +39,18 @@ class TestStorage implements Storage {
   }
   async copy(a: string, b: string) {
     await this.put(b, await this.get(a));
+  }
+  async startUpload(): Promise<string> {
+    throw Error('UNSUPPORTED');
+  }
+  async appendUpload(): Promise<{ received: number }> {
+    throw Error('UNSUPPORTED');
+  }
+  async remove(p: string) {
+    this.data.delete(p);
+  }
+  async download(p: string, _generation: unknown, filePath: string) {
+    await writeStreamToFile(await this.open(p), filePath);
   }
 }
 let video: Buffer;

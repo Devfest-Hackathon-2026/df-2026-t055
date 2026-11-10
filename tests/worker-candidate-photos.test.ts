@@ -131,6 +131,20 @@ test('各工程が原動画の代表時刻から抽出したJPEG資産を参照�
   }
 });
 
+test('1ジョブで原動画を一時ファイルへ1回だけ書き出し、全工程の切り出しで使い回して消す', async (t) => {
+  const h = await harness({ generate: async () => proposal([200, 500, 800]) });
+  const download = t.mock.method(h.storage, 'download');
+  const get = t.mock.method(h.storage, 'get');
+  await h.run();
+  assert.equal(h.db.get('generationJobs', 'job')!.status, 'succeeded');
+  assert.equal(h.db.all('assets').filter((a) => a.kind === 'image').length, 3);
+  assert.equal(download.mock.callCount(), 1);
+  assert.equal(get.mock.callCount(), 0);
+  const [path, , file] = download.mock.calls[0].arguments;
+  assert.equal(path, 'source/video.mp4');
+  await assert.rejects(readFile(file as string), { code: 'ENOENT' });
+});
+
 test('途中の切り出し失敗後にリース回復しても前の試行の候補資産が混ざらない', async (t) => {
   let calls = 0;
   const retryOutput = proposal([300, 800]);
