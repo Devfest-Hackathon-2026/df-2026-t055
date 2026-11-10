@@ -452,14 +452,16 @@ function Staff({ path, action }: { path: string; action: Action }) {
   useEffect(() => {
     void action(async () => {
       setTasks((await api('/tasks')).tasks);
-      setLearners((await api('/learners')).items);
+      const items: any[] = (await api('/learners')).items;
+      setLearners(items);
+      setChosen((current) =>
+        items.some((l) => l.learnerId === current) ? current : (items[0]?.learnerId ?? current),
+      );
     });
   }, [path]);
   const draftMatch = path.match(/\/drafts\/([^/]+)/);
   // 職員画面はパスで振り分ける。新しい画面はここへ追加し、既存の分岐は残す。
   if (draftMatch) return <Draft key={draftMatch[1]} id={draftMatch[1]} action={action} />;
-  if (path === '/staff/support')
-    return <StaffSupport api={api} go={go} subscribe={subscribeStaffSupport} />;
   return (
     <>
       <nav>
@@ -469,7 +471,9 @@ function Staff({ path, action }: { path: string; action: Action }) {
         <button onClick={() => go('/staff/support')}>支援要求</button>
         <button onClick={() => go('/staff/handover')}>承認版を確認・割当</button>
       </nav>
-      {path === '/staff/learners' || path.startsWith('/staff/learners/') ? (
+      {path === '/staff/support' ? (
+        <StaffSupport api={api} subscribe={subscribeStaffSupport} />
+      ) : path === '/staff/learners' || path.startsWith('/staff/learners/') ? (
         <StaffLearners key={path} path={path} api={api} go={go} />
       ) : path.startsWith('/staff/handover') ? (
         <Handover path={path.replace('/staff', '')} action={action} staff />
@@ -527,16 +531,18 @@ function Staff({ path, action }: { path: string; action: Action }) {
               <h2>{t.title}</h2>
               <p>{t.status === 'ready' ? '動画登録済み' : '動画の登録待ち'}</p>
               {t.videoAssetId && <Asset id={t.videoAssetId} video />}
-              {t.generationJobs?.map((j: any) => (
-                <p key={j.jobId}>
-                  生成状態：{generationStatusLabels[j.status]}（対象：
-                  {learners.find((l) => l.learnerId === j.learnerId)?.displayName ?? j.learnerId}）
-                  {j.modelId === 'fake-fixture' ? '（開発用Fake）' : ''}{' '}
-                  <button onClick={() => go(`/staff/tasks/${t.id}/drafts/${j.draftId}`)}>
-                    下書きを開く
-                  </button>
-                </p>
-              ))}
+              {t.generationJobs
+                ?.filter((j: any) => j.learnerId === chosen)
+                .map((j: any) => (
+                  <p key={j.jobId}>
+                    生成状態：{generationStatusLabels[j.status]}（対象：
+                    {learners.find((l) => l.learnerId === j.learnerId)?.displayName ?? j.learnerId}
+                    ）{j.modelId === 'fake-fixture' ? '（開発用Fake）' : ''}{' '}
+                    <button onClick={() => go(`/staff/tasks/${t.id}/drafts/${j.draftId}`)}>
+                      下書きを開く
+                    </button>
+                  </p>
+                ))}
               <button
                 disabled={t.status !== 'ready' || busy}
                 onClick={() =>
@@ -628,7 +634,9 @@ function Draft({ id, action }: { id: string; action: Action }) {
           throw Error('INVALID_JOB');
         setGenerationFailure(generationFailureReason(job.errorCode));
       } catch {
-        setGenerationFailure('失敗理由を取得できませんでした。「再取得」で確認してください。');
+        setGenerationFailure(
+          '失敗理由を取得できませんでした。「最新値を取得」で確認してください。',
+        );
       }
     }
     setDisplayMode(draftPreviewMode(d.displayMode));
@@ -771,7 +779,7 @@ function Draft({ id, action }: { id: string; action: Action }) {
             else void action(load);
           }}
         >
-          {draft.status === 'editing' ? '最新値を取得' : '再取得'}
+          最新値を取得
         </button>
       </nav>
       <h1>{manual ? '承認版のコピー' : 'AIの下書き（解釈）'}</h1>
@@ -1340,8 +1348,13 @@ function Handover({
             本人で絞り込む
             <select value={filter} onChange={(e) => setFilter(e.target.value)}>
               <option value=''>すべて</option>
-              <option value='a'>Aさん</option>
-              <option value='b'>Bさん</option>
+              {[...new Map(items.map((r) => [r.learnerId, r.displayName]))].map(
+                ([learnerId, displayName]) => (
+                  <option key={learnerId} value={learnerId}>
+                    {displayName}
+                  </option>
+                ),
+              )}
             </select>
           </label>
           {!items.length && <p>承認済み版はまだありません。</p>}
