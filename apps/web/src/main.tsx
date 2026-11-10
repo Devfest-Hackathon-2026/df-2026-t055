@@ -14,8 +14,14 @@ import {
 import {
   releaseCopyResponseSchema,
   improvementRetryInputSchema,
+  generationJobStatusSchema,
 } from '../../../packages/shared/src/index.ts';
-import { missingDraftChecks, draftPreviewMode, savedDraftReview } from './draft-review.ts';
+import {
+  missingDraftChecks,
+  draftPreviewMode,
+  savedDraftReview,
+  generationFailureReason,
+} from './draft-review.ts';
 import { StaffLearners } from './staff-learners.tsx';
 import { StaffSupport } from './staff-support.tsx';
 import { createTokenProvider } from './auth.ts';
@@ -38,7 +44,10 @@ import {
   clearWaiting,
   readStart,
   saveStart,
+  clearStart,
   startKey,
+  storageFailed,
+  safetyKeys,
 } from './safety.ts';
 import './style.css';
 const accounts = [
@@ -324,7 +333,7 @@ function App() {
         </a>
         {authMode === 'demo' ? (
           <>
-            <span>開発デモ · Fake生成</span>
+            <span>開発デモ</span>
             <label>
               デモアカウント{' '}
               <select
@@ -512,7 +521,8 @@ function Staff({ path, action }: { path: string; action: Action }) {
               {t.videoAssetId && <Asset id={t.videoAssetId} video />}
               {t.generationJobs?.map((j: any) => (
                 <p key={j.jobId}>
-                  生成状態：{j.status}{' '}
+                  生成状態：{j.status}
+                  {j.modelId === 'fake-fixture' ? '（開発用Fake）' : ''}{' '}
                   <button onClick={() => go(`/staff/tasks/${t.id}/drafts/${j.draftId}`)}>
                     下書きを開く
                   </button>
@@ -534,7 +544,7 @@ function Staff({ path, action }: { path: string; action: Action }) {
                   })
                 }
               >
-                AIの下書きを作る（開発用Fake）
+                AIの下書きを作る
               </button>
             </section>
           ))}
@@ -545,6 +555,7 @@ function Staff({ path, action }: { path: string; action: Action }) {
 }
 function Draft({ id, action }: { id: string; action: Action }) {
   const [draft, setDraft] = useState<any>(),
+    [job, setJob] = useState<any>(),
     [task, setTask] = useState<any>(),
     [steps, setSteps] = useState<EditedStep[]>([]),
     [checks, setChecks] = useState<ReviewChecks>({
@@ -558,6 +569,7 @@ function Draft({ id, action }: { id: string; action: Action }) {
   const [displayMode, setDisplayMode] = useState<'photo_only' | 'photo_text'>('photo_text'),
     [audioGuidance, setAudioGuidance] = useState(false);
   const [source, setSource] = useState('');
+  const [generationFailure, setGenerationFailure] = useState('');
   const [improvementSource, setImprovementSource] = useState<any>();
   const [appliedRefs, setAppliedRefs] = useState<Array<{ recordId: string; revision: number }>>([]);
   const [previewMode, setPreviewMode] = useState<'photo_only' | 'photo_text'>('photo_text');
@@ -586,7 +598,30 @@ function Draft({ id, action }: { id: string; action: Action }) {
   };
   const load = async () => {
     const d = (await api(`/drafts/${id}`)).draft;
+    setJob(
+      d.jobId
+        ? await api(`/jobs/${encodeURIComponent(d.jobId)}`).catch(() => undefined)
+        : undefined,
+    );
     setDraft(d);
+    setGenerationFailure('');
+    if (!isManualDraft(d) && d.status === 'failed' && d.jobId) {
+      try {
+        const job = generationJobStatusSchema.parse(
+          await api(`/jobs/${encodeURIComponent(d.jobId)}`),
+        );
+        if (
+          job.jobId !== d.jobId ||
+          job.draftId !== id ||
+          job.kind !== 'guide' ||
+          job.status !== 'failed'
+        )
+          throw Error('INVALID_JOB');
+        setGenerationFailure(generationFailureReason(job.errorCode));
+      } catch {
+        setGenerationFailure('失敗理由を取得できませんでした。「再取得」で確認してください。');
+      }
+    }
     setDisplayMode(draftPreviewMode(d.displayMode));
     setAudioGuidance(d.audioGuidance ?? false);
     setSteps(d.editedSteps);
@@ -745,7 +780,10 @@ function Draft({ id, action }: { id: string; action: Action }) {
         <p role='status'>動画解析中です。3秒ごとに状態を確認しています。</p>
       ) : !manual && draft.status === 'failed' ? (
         <section>
-          <p role='alert'>生成に失敗しました。本人用の手順は作成されていません。</p>
+          <p role='alert'>
+            生成に失敗しました。本人用の手順は作成されていません。
+            {generationFailure || generationFailureReason()}
+          </p>
           {error && <p role='alert'>{error}</p>}
           <button disabled={busy} onClick={() => void retry()}>
             新しいジョブで再試行
@@ -769,7 +807,7 @@ function Draft({ id, action }: { id: string; action: Action }) {
           <p>
             {manual
               ? '承認版をコピーした手作業の下書きです。原動画と照合し、修正後にすべての確認を行ってから、新しい版として承認してください。元の承認版と実行中の手順は変わりません。'
-              : 'Fake候補です。動画の動作・原音と候補を照合し、必要な修正と写真切り出しを行ってください。確認欄はすべて未確認から始まります。'}
+              : `${job?.modelId === 'fake-fixture' ? 'Fake候補' : 'AIの候補'}です。動画の動作・原音と候補を照合し、必要な修正と写真切り出しを行ってください。確認欄はすべて未確認から始まります。`}
           </p>
           {error && <p role='alert'>{error}</p>}
           {latest && (
@@ -1351,6 +1389,10 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
   const key = sessionId ? safetyKey(uid, sessionId) : '';
   const safety = readSafety(localStorage, key);
   const savedStart = readStart(localStorage, uid);
+  const storageError =
+    storageFailed(localStorage, key) || storageFailed(localStorage, startKey(uid));
+  const storageMessage =
+    '端末の記録を使えません。画面を閉じると送信をやり直せません。近くの職員をよんでください。';
   useEffect(() => {
     setSession(undefined);
     void action(async () => {
@@ -1365,9 +1407,7 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
       if (running) return;
       running = true;
       try {
-        const keys = Array.from({ length: localStorage.length }, (_, i) =>
-          localStorage.key(i),
-        ).filter((k): k is string => !!k && k.startsWith(`safety:${uid}:`));
+        const keys = safetyKeys(localStorage, uid);
         for (const pendingKey of keys) {
           if (!active || account !== uid) return;
           if (!readSafety(localStorage, pendingKey).pending.length) continue;
@@ -1420,7 +1460,7 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
           ...current.safety,
           expectedRevision: s.revision,
         });
-        localStorage.removeItem(startKey(uid));
+        clearStart(localStorage, uid);
         if (active) {
           setHomeHalted(true);
           setMessage(
@@ -1536,18 +1576,18 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
     setSendFailed(false);
     if (!sessionId) {
       if (pendingHomeSafety.current !== 'stop') pendingHomeSafety.current = type;
+      setHomeHalted(true);
       const start = readStart(localStorage, uid);
       if (start && start.safety?.type !== 'stop') {
         saveStart(localStorage, uid, {
           ...start,
           safety: { type: pendingHomeSafety.current, clientEventId: crypto.randomUUID() },
         });
-        setSafetyTick((x) => x + 1);
       }
-      setHomeHalted(true);
       setMessage(
         pendingHomeSafety.current === 'stop' ? '作業をやめました' : '近くの職員をよんでください',
       );
+      setSafetyTick((x) => x + 1);
       return;
     }
     hold(localStorage, key, {
@@ -1559,7 +1599,7 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
     setSafetyTick((x) => x + 1);
   };
   const event = async (type: string) => {
-    if (readSafety(localStorage, key).stopped) return;
+    if (readSafety(localStorage, key).stopped || storageError) return;
     setBusy(true);
     try {
       await api(`/me/sessions/${sessionId}/events`, 'POST', {
@@ -1567,8 +1607,10 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
         expectedRevision: session!.revision,
         type,
       });
+      if (readSafety(localStorage, key).stopped || storageFailed(localStorage, key)) return;
       if (type === 'resume') clearWaiting(localStorage, key);
       const s = await api(`/me/sessions/${sessionId}`);
+      if (readSafety(localStorage, key).stopped || storageFailed(localStorage, key)) return;
       setSession(s);
     } finally {
       setBusy(false);
@@ -1593,15 +1635,19 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
       {!sessionId ? (
         <>
           <h1>
-            {savedStart?.safety
-              ? savedStart.safety.type === 'stop'
-                ? '作業をやめました'
-                : '近くの職員をよんでください'
-              : homeHalted
-                ? message
-                : 'きょうの さぎょう'}
+            {storageError
+              ? '作業をやめました'
+              : savedStart?.safety
+                ? savedStart.safety.type === 'stop'
+                  ? '作業をやめました'
+                  : '近くの職員をよんでください'
+                : homeHalted
+                  ? message
+                  : 'きょうの さぎょう'}
           </h1>
+          {storageError && <p role='status'>{storageMessage}</p>}
           {!homeHalted &&
+            !storageError &&
             !savedStart?.safety &&
             (assignments.length ? (
               assignments.map((a) => (
@@ -1616,6 +1662,7 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
                         try {
                           const start = { taskId: a.taskId, clientRequestId: crypto.randomUUID() };
                           saveStart(localStorage, uid, start);
+                          if (storageFailed(localStorage, startKey(uid))) return;
                           const s = await api('/me/sessions', 'POST', start);
                           const saved = readStart(localStorage, uid);
                           if (saved?.clientRequestId !== start.clientRequestId) return;
@@ -1625,11 +1672,17 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
                               ...saved.safety,
                               expectedRevision: s.revision,
                             });
-                            localStorage.removeItem(startKey(uid));
+                            clearStart(localStorage, uid);
                             setSafetyTick((x) => x + 1);
                             return;
                           }
-                          localStorage.removeItem(startKey(uid));
+                          if (
+                            pendingHomeSafety.current ||
+                            storageFailed(localStorage, startKey(uid))
+                          )
+                            return;
+                          clearStart(localStorage, uid);
+                          if (storageFailed(localStorage, startKey(uid))) return;
                           go(`/me/sessions/${s.sessionId}`);
                         } finally {
                           setBusy(false);
@@ -1645,14 +1698,14 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
               <p>職員をよんでください</p>
             ))}
         </>
-      ) : safety.stopped || session?.status === 'stopped' ? (
+      ) : safety.stopped || storageError || session?.status === 'stopped' ? (
         <section>
           <h1 className='learner-state'>{learnerControlContent('作業をやめました')}</h1>
           <p>職員と そうだんしてください</p>
           <p className='learner-state' role='status'>
             {safety.pending.length > 0 &&
               learnerControlContent(sendFailed ? '送れませんでした' : '送信中')}
-            {message}
+            {storageError ? storageMessage : message}
           </p>
         </section>
       ) : safety.waiting || session?.status === 'waiting_help' ? (
@@ -1675,7 +1728,10 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
                 });
                 if (readSafety(localStorage, key).stopped) return;
                 clearWaiting(localStorage, key);
-                setSession(await api(`/me/sessions/${sessionId}`));
+                const updated = await api(`/me/sessions/${sessionId}`);
+                if (readSafety(localStorage, key).stopped || storageFailed(localStorage, key))
+                  return;
+                setSession(updated);
               })
             }
           >
@@ -1726,7 +1782,7 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
         <button
           className='help'
           onClick={() => requestSafety('help')}
-          disabled={safety.stopped || session?.status === 'stopped'}
+          disabled={safety.stopped || storageError || session?.status === 'stopped'}
         >
           {learnerControlContent('手伝って')}
         </button>

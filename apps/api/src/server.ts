@@ -7,6 +7,7 @@ import { configuredCorrectionModel } from '../../generator/src/correction-model.
 import { configuredStorage } from './cloud-storage.ts';
 import { configuredQueue } from './cloud-tasks.ts';
 import { configuredRepository } from './firestore-repository.ts';
+import { configuredModelConfig } from '../../generator/src/model-config.ts';
 import { configuredModel } from '../../generator/src/model.ts';
 if (process.env.NODE_ENV === 'production') {
   if (
@@ -31,6 +32,7 @@ if (process.env.NODE_ENV === 'production') {
 const db = configuredRepository(),
   storage = configuredStorage();
 if (db instanceof MemoryRepository) seed(db);
+const modelConfig = configuredModelConfig(process.env);
 const limit = Number(process.env.GENERATION_GLOBAL_LIMIT ?? 30);
 const runJob = createWorker(
   db,
@@ -43,6 +45,8 @@ const { app } = createApp({
   db,
   storage,
   globalLimit: limit,
+  modelId: modelConfig.modelId,
+  promptVersion: modelConfig.promptVersion,
   runJob,
   queue: configuredQueue(),
 });

@@ -187,8 +187,10 @@ Firestore Native modeに構造化データ、非公開Cloud Storageに動画・�
 - 生成ジョブ：`queued → running → succeeded | failed`。Cloud Tasksの再配送は同じジョブを検査し、成功済みなら終了。実行中はリースを使い、切れたリースだけを取り直す。試行上限は3回。
 - 下書き：AI生成は`generating → editing → approved`、生成失敗は`generating → failed`。承認版から手作業用にコピーすると、新しいdraftIdをeditingで作る。承認時に編集を閉じる。再生成も別draftIdとし、旧下書きと承認版を保存する。
 - 承認処理：版専用の画像を先に用意し、トランザクションで下書きrevision・確認欄を検査してrelease作成とdraftのapproved化を同時実行する。競合は409。失敗して残った画像は職員にも本人にも配信せず、保管期限で消す。[Firestoreのトランザクション仕様](https://cloud.google.com/firestore/native/docs/manage-data/transactions)
-- セッション：`active → waiting_help → active`、`active | waiting_help → stopped`、`active → completed`。`stopped`と`completed`は終端。停止の再送は成功扱いとし、停止後の進行イベントは409で拒否する。再開は担当職員の「対応を終えてつづける」、または対応完了後の本人の「つづける」で行う。再開時はactiveSupportRequestIdを外し、版と工程は保つ。
+- セッション：`active → waiting_help → active`、`active | waiting_help → stopped`、`active → completed`、`completed → stopped`（stopイベントのみ）。`completed`はstop以外の進行イベントに対して終端とし、新たな進行イベントは409で拒否する。本人の「やめる」は常に優先し、完了後に遅延到着したstopも受け付ける。stopとcompleteが競合した場合も、最終状態はstoppedとする。`stopped`は終端とし、停止の再送は成功扱い、停止後の進行イベントは409で拒否する。再開は担当職員の「対応を終えてつづける」、または対応完了後の本人の「つづける」で行う。再開時はactiveSupportRequestIdを外し、版と工程は保つ。
 - 支援要求：`help` は `open → assigned → in_progress → acknowledged`（未担当・担当決定・対応中・対応完了）、`stop` は `open → acknowledged`（停止通知の確認）。担当決定はトランザクションで行う。担当職員だけがhelpの開始・完了・職員側からの再開を操作できる。同じ職員の担当決定・開始・完了の再送では元の職員と時刻を保つ。記録の入力や生成の状態は要求と分ける。
+
+完了の記録とセッションの現在状態は区別する。受理済みのcompleteイベントは`sessionEvents`の履歴に残し、後からstopを受け付けても削除・変更しない。遅延stopの到着後も完了記録を履歴から参照できるが、セッションの現在状態は`stopped`とする。
 
 Cloud Storageは`source/{orgId}/{taskId}/...`、`draft/{orgId}/{draftId}/...`、`approved/{orgId}/{releaseId}/...`に分ける。本人へ配信するのは、次回用に割り当てられた版または本人のセッションに固定された版の承認画像・音声。元動画は職員と、その承認版を読む新人に配信する。新人には承認済み区間のリンクを付ける。
 
@@ -210,7 +212,7 @@ Cloud Storageは`source/{orgId}/{taskId}/...`、`draft/{orgId}/{draftId}/...`、
 | `GET /learners/{id}/work-guides` / `GET /learners/{id}/work-guides/{taskId}/support-records` | 職員 | 作業別の次回版・未反映件数・生成／確認状態と、対象の本人・作業の支援記録。前者は `{schemaVersion,items:[{taskId,title,assignment,unappliedCount,latestDraft,latestGeneration}]}` を返す。未存在の割当・下書き・生成は `null`。後者は `{schemaVersion,records}` を返し、各記録の `applied` は割当版とその継承元が採用した同一ID・revisionに限りtrueとする。継承元が欠落・循環・別対象の場合は409を返す |
 | `GET /learners/{id}/work-guides/{taskId}/corrections` | 職員 | 同じ所属の対象本人・作業の修正履歴、参考メモ、要約ジョブの状態。保存済みの修正とAIの提案を分けて返す |
 | `POST /tasks/{id}/generations` | 職員 | `{learnerId}` → 202 `{jobId,draftId}`。記録からの改善では `sourceReleaseId, supportInputs:[{recordId, revision, summary}], clientRequestId` も送る。新規生成・改善を合わせて1作業あたり手順下書きの生成試行10回まで |
-| `GET /jobs/{id}` | 職員 | `{kind,status,draftId,errorCode?}`。画面は3秒間隔で取得。下書きの生成状態にはguideのジョブを使う。失敗した改善ジョブには、再試行用に受付時の本人・元版・確認済み要約と記録版を `retryInput` として返す |
+| `GET /jobs/{id}` | 職員 | `{kind,status,draftId,modelId,promptVersion,errorCode?}`。画面は3秒間隔で取得。下書きの生成状態にはguideのジョブを使う。失敗した改善ジョブには、再試行用に受付時の本人・元版・確認済み要約と記録版を `retryInput` として返す |
 | `GET /drafts/{id}` | 職員 | AI原文と編集データを別オブジェクトで返す |
 | `PATCH /drafts/{id}` | 職員 | `{expectedRevision,editedSteps,reviewChecks,displayMode?,audioGuidance?,appliedSupportRecordRefs?,correctionReason?}` → `{revision,reviewChecks}`。内容を変更した場合は第2節の規則で確認チェックを外し、保存後のチェック状態を返す。編集内容の差分があれば修正履歴も保存し、参考メモの生成を非同期で受け付ける。確認チェックだけの変更や、競合で保存できなかった修正からは履歴を作らない |
 | `POST /drafts/{id}/frames` | 職員 | `{frameMs}` → `{imageAssetId}`。サーバーのffmpegで原動画から静止画を切り出す |
@@ -291,7 +293,7 @@ Vertex AI経由のGoogle Gen AI SDKを使う。初回生成の入力は非公開
 
 全キー必須、stepsは1〜20件、stepIdは一意。全時刻は`0 <= startMs <= frameMs <= endMs <= durationMs`、工程順はstartMsの昇順とする。短文は40文字、候補文は各200文字、reviewFlagsは各10件・各100文字まで。聞き取れない音声は空文字と理由を返す。Geminiのstatusや承認フィールドは受け取らない。
 
-API側でも同じスキーマ、文字数、時刻、参照先を検査する。違反・空出力・安全フィルターによる停止はジョブfailedとし、本人向けデータを一切作らない。意味の正しさは職員の照合で判断する。モデルID、プロンプト版、生成所要時間、修正件数を記録する。
+API側でも同じスキーマ、文字数、時刻、参照先を検査する。違反・空出力・安全フィルターによる停止はジョブfailedとし、本人向けデータを一切作らない。意味の正しさは職員の照合で判断する。モデルID、プロンプト版、生成所要時間、修正件数を記録する。手順下書きと参考メモの受付は、モデル選択と同じ設定元のID・プロンプト版を保存する。Fakeは `fake-fixture`、Vertexは選択した実モデルIDとし、職員画面のFake表記は保存済みジョブの `modelId` に基づく。生成前のボタンはモデルを断定せず、表示名だけで実Vertex生成の成功とは判定しない。
 
 モデルの具体ID・利用ロケーション・入出力単価は **AI担当が11/8午前にプロジェクトの利用可能モデルと公式料金表で決める**。選定条件は動画・音声入力、構造化JSON、手本1本の成功、予算内のFlash系モデル。決定値を環境設定と検証記録に固定し、失敗時に別モデルへ自動切替しない。
 

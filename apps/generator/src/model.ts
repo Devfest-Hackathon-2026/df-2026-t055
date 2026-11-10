@@ -1,3 +1,4 @@
+import { configuredModelConfig } from './model-config.ts';
 import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
 import {
@@ -137,11 +138,8 @@ export function vertexGenerateContentRequest(request: VertexVideoRequest, signal
 }
 
 function vertexTransport(env: NodeJS.ProcessEnv): VertexVideoTransport {
-  const {
-    GOOGLE_CLOUD_PROJECT: project,
-    GOOGLE_CLOUD_LOCATION: location,
-    VERTEX_MODEL: model,
-  } = env;
+  const { GOOGLE_CLOUD_PROJECT: project, GOOGLE_CLOUD_LOCATION: location } = env;
+  const { modelId: model } = configuredModelConfig({ ...env, MODEL_PROVIDER: 'vertex' });
   return async (request, signal) => {
     signal?.throwIfAborted();
     if (!project || !location || !model) throw Error('VERTEX_MODEL_NOT_CONFIGURED');
@@ -228,7 +226,7 @@ export class VertexVideoModel implements VideoModel {
 }
 
 export function configuredModel(env = process.env): VideoModel {
-  return env.MODEL_PROVIDER === 'vertex'
+  return configuredModelConfig(env).provider === 'vertex'
     ? new VertexVideoModel(env.VIDEO_BUCKET ?? '', vertexTransport(env))
     : new FakeModel();
 }

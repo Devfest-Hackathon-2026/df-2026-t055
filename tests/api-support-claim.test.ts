@@ -115,6 +115,7 @@ async function harness() {
       'schemaVersion',
       'status',
       'stepIndex',
+      ...(kind === 'help' ? ['support'] : []),
     ]);
     return db.all('supportRequests').find((q) => q.sessionId === session.sessionId)!;
   }
