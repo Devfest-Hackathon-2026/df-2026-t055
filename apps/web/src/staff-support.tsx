@@ -12,11 +12,9 @@ import { SupportRecordForm } from './support-record.tsx';
 type Api = (path: string, method?: string, body?: unknown) => Promise<any>;
 export function StaffSupport({
   api,
-  go,
   subscribe,
 }: {
   api: Api;
-  go: (path: string) => void;
   subscribe: (
     receive: (value: unknown) => void,
     status: (connected: boolean) => void,
@@ -201,7 +199,6 @@ export function StaffSupport({
   };
   return (
     <>
-      <button onClick={() => go('/staff')}>作業一覧</button>
       <h1 ref={heading} tabIndex={-1}>
         支援要求
       </h1>

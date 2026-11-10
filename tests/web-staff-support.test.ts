@@ -123,12 +123,16 @@ test('担当外には操作を出さず、担当中は完了と本人確認後�
   const subscribe = () => () => {};
   const render = () => {
     hooks.begin();
-    return StaffSupport({ api, go: () => {}, subscribe });
+    return StaffSupport({ api, subscribe });
   };
   let tree = render();
   await hooks.flush();
   await settle();
   tree = render();
+  assert.equal(
+    nodes(tree).some((n) => n.type === 'button' && text(n) === '作業一覧'),
+    false,
+  );
   const sections = nodes(tree).filter((n) => n.type === 'section');
   assert.match(text(sections[0]), /本人：本人A／工程：one/);
   assert.doesNotMatch(text(sections[0]), /本人：a／|担当：staff/);
@@ -203,7 +207,7 @@ test('本人名の取得が失敗または応答待ちでも一覧と記録の�
     const subscribe = () => () => {};
     const render = () => {
       hooks.begin();
-      return StaffSupport({ api, go: () => {}, subscribe });
+      return StaffSupport({ api, subscribe });
     };
     render();
     await hooks.flush();
@@ -260,7 +264,7 @@ test('担当競合の409は一覧を再取得し成功扱いにしない', async
   const subscribe = () => () => {};
   const render = () => {
     hooks.begin();
-    return StaffSupport({ api, go: () => {}, subscribe });
+    return StaffSupport({ api, subscribe });
   };
   let tree = render();
   await hooks.flush();
@@ -304,7 +308,7 @@ test('停止済みや別の要求を待つセッションには再開操作を�
     const subscribe = () => () => {};
     const render = () => {
       hooks.begin();
-      return StaffSupport({ api, go: () => {}, subscribe });
+      return StaffSupport({ api, subscribe });
     };
     render();
     await hooks.flush();
@@ -346,7 +350,7 @@ test('応答を失った再開要求は同じIDとrevisionで再試行する', a
   const subscribe = () => () => {};
   const render = () => {
     hooks.begin();
-    return StaffSupport({ api, go: () => {}, subscribe });
+    return StaffSupport({ api, subscribe });
   };
   render();
   await hooks.flush();
@@ -401,7 +405,7 @@ test('対応開始時に記録を開き、完了後も後入力の導線を残�
   const subscribe = () => () => {};
   const render = () => {
     hooks.begin();
-    return StaffSupport({ api, go: () => {}, subscribe });
+    return StaffSupport({ api, subscribe });
   };
   render();
   await hooks.flush();
@@ -460,7 +464,7 @@ test('認証済み通知中は通知で更新し、切断中は3秒ごとの確�
   };
   const render = () => {
     hooks.begin();
-    return StaffSupport({ api, go: () => {}, subscribe });
+    return StaffSupport({ api, subscribe });
   };
   render();
   await hooks.flush();
