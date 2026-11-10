@@ -473,7 +473,7 @@ export function createApp(
           displayMode: learner.preferences.displayMode ?? 'photo_text',
           confirmedGuidance: learner.confirmedGuidance ?? [],
         });
-      } else if (correctionInputs.length) {
+      } else {
         const video = await get('assets', t.videoAssetId, res);
         inputSnapshot = initialGuideInputSnapshotSchema.parse({
           taskId: t.id,
@@ -519,7 +519,7 @@ export function createApp(
         budgetUsed: 1,
         modelId: options.modelId ?? 'fake-fixture',
         promptVersion: '1',
-        ...(inputSnapshot ? { inputSnapshot } : {}),
+        inputSnapshot,
         ...(improvement ? { clientRequestId: improvement.clientRequestId, requestHash } : {}),
       });
       d.jobId = j.id;

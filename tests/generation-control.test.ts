@@ -6,7 +6,11 @@ import { MemoryRepository, doc, seed } from '../apps/api/src/adapters.ts';
 test('pause rejects generation while ordinary reads and edits stay available', async () => {
   const db = new MemoryRepository();
   seed(db);
-  db.put('tasks', doc('demo', { id: 'task', title: '作業', status: 'ready' }));
+  db.put(
+    'tasks',
+    doc('demo', { id: 'task', title: '作業', status: 'ready', videoAssetId: 'video' }),
+  );
+  db.put('assets', doc('demo', { id: 'video', kind: 'video', durationMs: 1000 }));
   db.put('operations', doc('demo', { id: 'generation-control', enabled: false }));
   const { app } = createApp({ db });
   const request = (path: string, method = 'GET', body?: object) =>
