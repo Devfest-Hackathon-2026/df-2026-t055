@@ -390,7 +390,11 @@ function FirebaseLogin({ error }: { error: string }) {
   return (
     <section>
       <h1>ログイン</h1>
-      {(error || failure) && <p role='alert'>{error || failure}</p>}
+      {(error || failure) && (
+        <p role='alert' className='error'>
+          {error || failure}
+        </p>
+      )}
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -401,7 +405,9 @@ function FirebaseLogin({ error }: { error: string }) {
             .signIn(email.trim(), password)
             .then(() => setPassword(''))
             .catch(() => {
-              setFailure('ログインできませんでした。入力内容を確認してください。');
+              setFailure(
+                'ログインできませんでした。メールアドレスとパスワードの両方を確認してください。',
+              );
               setPassword('');
             })
             .finally(() => setBusy(false));
@@ -680,6 +686,17 @@ function Draft({ id, action }: { id: string; action: Action }) {
       draft.aiProposal?.steps.some((s: any) => s.reviewFlags.length)
     );
   const missing = missingDraftChecks(steps, checks, flagsRequired);
+  const approvalDisabledReason = busy
+    ? ''
+    : [
+        missing.length ? `承認するには、次の確認が必要です：${missing.join('、')}` : '',
+        conflict ? '状態が変わりました。「最新値を取得」して確認してください。' : '',
+        draft.origin === 'improvement' && !improvementSource
+          ? 'コピー元の承認版の読み込みが終わっていません。'
+          : '',
+      ]
+        .filter(Boolean)
+        .join(' ');
   const run = async (fn: () => Promise<void>) => {
     if (sending.current) return;
     sending.current = true;
@@ -1094,6 +1111,7 @@ function Draft({ id, action }: { id: string; action: Action }) {
                 編集と確認を保存
               </button>
               <button
+                aria-describedby={approvalDisabledReason ? 'approval-disabled-reason' : undefined}
                 disabled={
                   busy ||
                   conflict ||
@@ -1127,6 +1145,9 @@ function Draft({ id, action }: { id: string; action: Action }) {
               >
                 この内容を承認
               </button>
+              {approvalDisabledReason && (
+                <p id='approval-disabled-reason'>{approvalDisabledReason}</p>
+              )}
             </section>
           </fieldset>
         </>

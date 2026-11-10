@@ -285,6 +285,109 @@ test('review helpers list missing steps and flags, default mode, and validate se
   );
   assert.throws(() => savedDraftReview({ revision: 2 }));
 });
+test('approval describes every missing check immediately after the button and clears when ready', async () => {
+  const h = harness({
+    reviewChecks: { presentationConfirmed: false, flagResolution: '', steps: {} },
+  });
+  let tree = await open(h);
+  const approve = button(tree, 'この内容を承認');
+  assert.equal(approve.props.disabled, true);
+  assert.ok(approve.props['aria-describedby']);
+  const reason = nodes(tree).find((n) => n.props.id === approve.props['aria-describedby']);
+  assert.ok(reason);
+  assert.equal(nodes(tree)[nodes(tree).indexOf(approve) + 1], reason);
+  assert.equal(
+    text(reason),
+    `承認するには、次の確認が必要です：${missingDraftChecks(h.server.editedSteps, h.server.reviewChecks, true).join('、')}`,
+  );
+  for (const label of ['動画照合済み', '写真・説明確認済み', '本人への提示内容確認済み']) {
+    change(tree, label, true);
+    tree = h.render();
+  }
+  change(tree, '確認が必要な点への対応記録', '対応済み');
+  tree = h.render();
+  assert.equal(button(tree, 'この内容を承認').props.disabled, false);
+  assert.equal(button(tree, 'この内容を承認').props['aria-describedby'], undefined);
+  assert.equal(
+    nodes(tree).some((n) => n.props.id === reason.props.id),
+    false,
+  );
+});
+test('approval describes a conflict even when all review checks are complete', async () => {
+  const h = harness();
+  let tree = await open(h);
+  h.setFail(409);
+  button(tree, '編集と確認を保存').props.onClick();
+  await settle();
+  tree = h.render();
+  const approve = button(tree, 'この内容を承認');
+  assert.equal(approve.props.disabled, true);
+  assert.ok(approve.props['aria-describedby']);
+  const reason = nodes(tree).find((n) => n.props.id === approve.props['aria-describedby']);
+  assert.equal(nodes(tree)[nodes(tree).indexOf(approve) + 1], reason);
+  assert.equal(text(reason), '状態が変わりました。「最新値を取得」して確認してください。');
+  button(tree, '最新値を取得').props.onClick();
+  await settle();
+  tree = h.render();
+  assert.equal(button(tree, 'この内容を承認').props.disabled, false);
+  assert.equal(button(tree, 'この内容を承認').props['aria-describedby'], undefined);
+});
+test('approval explains a pending improvement source and clears after it loads', async () => {
+  const h = harness({ origin: 'improvement', sourceReleaseId: 'source' });
+  const request = (globalThis as any).draftApi;
+  let finish!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  (globalThis as any).draftApi = async (...args: any[]) => {
+    if (args[0] === '/handover/releases/source') await pending;
+    return request(...args);
+  };
+  let tree = await open(h);
+  const approve = button(tree, 'この内容を承認');
+  assert.equal(approve.props.disabled, true);
+  assert.ok(approve.props['aria-describedby']);
+  const reason = nodes(tree).find((n) => n.props.id === approve.props['aria-describedby']);
+  assert.equal(text(reason), 'コピー元の承認版の読み込みが終わっていません。');
+  finish();
+  await settle();
+  tree = h.render();
+  assert.equal(button(tree, 'この内容を承認').props.disabled, false);
+  assert.equal(button(tree, 'この内容を承認').props['aria-describedby'], undefined);
+});
+test('approval hides disabled reasons while saving and restores them afterwards', async () => {
+  const h = harness({
+    reviewChecks: { presentationConfirmed: false, flagResolution: '', steps: {} },
+  });
+  let tree = await open(h);
+  const reasonId = button(tree, 'この内容を承認').props['aria-describedby'];
+  assert.ok(reasonId);
+  const request = (globalThis as any).draftApi;
+  let finish!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  (globalThis as any).draftApi = async (...args: any[]) => {
+    if (args[1] === 'PATCH') await pending;
+    return request(...args);
+  };
+  button(tree, '編集と確認を保存').props.onClick();
+  tree = h.render();
+  assert.equal(button(tree, 'この内容を承認').props.disabled, true);
+  assert.equal(button(tree, 'この内容を承認').props['aria-describedby'], undefined);
+  assert.equal(
+    nodes(tree).some((n) => n.props.id === reasonId),
+    false,
+  );
+  finish();
+  await settle();
+  tree = h.render();
+  assert.equal(button(tree, 'この内容を承認').props['aria-describedby'], reasonId);
+  assert.match(
+    text(nodes(tree).find((n) => n.props.id === reasonId)),
+    /承認するには、次の確認が必要です：/,
+  );
+});
 test('labelled edits PATCH presentation and alt, server checks replace local checks, re-confirm then approve', async () => {
   const h = harness();
   let tree = await open(h);
