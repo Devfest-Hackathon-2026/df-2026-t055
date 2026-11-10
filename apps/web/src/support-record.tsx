@@ -112,7 +112,11 @@ export function SupportRecordForm({
       setFields((old) => ({ ...old, [key]: e.target.value })),
   });
   return (
-    <section hidden={!open} aria-label={`支援記録 ${requestLabel || requestId}`}>
+    <section
+      hidden={!open}
+      aria-label={`支援記録 ${requestLabel || requestId}`}
+      className='record-card'
+    >
       <h3 ref={heading} tabIndex={-1}>
         支援記録
       </h3>
@@ -155,7 +159,7 @@ export function SupportRecordForm({
             次回の改善提案
             <textarea {...field('improvementSuggestion')} />
           </label>
-          <button type='submit' disabled={busy || conflict}>
+          <button type='submit' className='primary' disabled={busy || conflict}>
             記録を保存
           </button>
         </form>

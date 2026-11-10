@@ -50,7 +50,8 @@ function nodes(tree: any): any[] {
 }
 function text(tree: any): string {
   if (Array.isArray(tree)) return tree.map(text).join('');
-  if (React.isValidElement(tree)) return text((tree.props as any).children);
+  if (React.isValidElement(tree))
+    return tree.type === 'rt' ? '' : text((tree.props as any).children);
   return tree == null ? '' : String(tree);
 }
 async function settle() {
@@ -405,6 +406,18 @@ test('開始応答前に再読込しても同じ開始IDと停止IDで復旧し�
   assert.equal(stop.stopped, true);
   assert.equal(stop.pending[0].clientEventId, 'stop-original');
   assert.match(text(render()), /作業をやめました/);
+});
+
+test('手伝ってボタンの表示にルビが付き、aria-label は付かない', async () => {
+  const h = harness();
+  const tree = h.render();
+  const help = nodes(tree).find((n) => n.type === 'button' && text(n) === '手伝って');
+  assert.ok(help);
+  assert.equal(help.props['aria-label'], undefined);
+  const rts = nodes(help)
+    .filter((n) => n.type === 'rt')
+    .map((n) => n.props.children);
+  assert.deepEqual(rts, ['て', 'つだ']);
 });
 
 function checkState(tree: any, label: LearnerPictogramLabel) {

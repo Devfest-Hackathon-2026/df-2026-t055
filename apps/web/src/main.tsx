@@ -24,6 +24,7 @@ import {
 } from './draft-review.ts';
 import { StaffLearners } from './staff-learners.tsx';
 import { StaffSupport } from './staff-support.tsx';
+import { StatusBadge, badgeKindOf } from './status-badge.tsx';
 import { createTokenProvider } from './auth.ts';
 import { createFirebaseSession } from './firebase-session.ts';
 import { subscribeSupport } from './support-ws.ts';
@@ -470,7 +471,7 @@ function Staff({ path, action }: { path: string; action: Action }) {
   if (draftMatch) return <Draft key={draftMatch[1]} id={draftMatch[1]} action={action} />;
   return (
     <>
-      <nav>
+      <nav className='staff-nav'>
         <button onClick={() => go('/staff')}>作業一覧</button>
         <button onClick={() => go('/staff/learners')}>本人一覧・登録</button>
         <button onClick={() => go('/staff/tasks/new')}>＋ 手本を登録</button>
@@ -499,6 +500,7 @@ function Staff({ path, action }: { path: string; action: Action }) {
             />
           </label>
           <button
+            className='primary'
             disabled={!file || busy}
             onClick={() =>
               void action(async () => {
@@ -532,43 +534,54 @@ function Staff({ path, action }: { path: string; action: Action }) {
             </select>
           </label>
           {tasks.length === 0 && <p>「手本を登録」から動画を登録してください。</p>}
-          {tasks.map((t) => (
-            <section key={t.id}>
-              <h2>{t.title}</h2>
-              <p>{t.status === 'ready' ? '動画登録済み' : '動画の登録待ち'}</p>
-              {t.videoAssetId && <Asset id={t.videoAssetId} video />}
-              {t.generationJobs
-                ?.filter((j: any) => j.learnerId === chosen)
-                .map((j: any) => (
-                  <p key={j.jobId}>
-                    生成状態：{generationStatusLabels[j.status]}（対象：
-                    {learners.find((l) => l.learnerId === j.learnerId)?.displayName ?? j.learnerId}
-                    ）{j.modelId === 'fake-fixture' ? '（開発用Fake）' : ''}{' '}
-                    <button onClick={() => go(`/staff/tasks/${t.id}/drafts/${j.draftId}`)}>
-                      下書きを開く
-                    </button>
-                  </p>
-                ))}
-              <button
-                disabled={t.status !== 'ready' || busy}
-                onClick={() =>
-                  void action(async () => {
-                    setBusy(true);
-                    try {
-                      const r = await api(`/tasks/${t.id}/generations`, 'POST', {
-                        learnerId: chosen,
-                      });
-                      go(`/staff/tasks/${t.id}/drafts/${r.draftId}`);
-                    } finally {
-                      setBusy(false);
-                    }
-                  })
-                }
-              >
-                AIの下書きを作る
-              </button>
-            </section>
-          ))}
+          <div className='task-grid'>
+            {tasks.map((t) => (
+              <section key={t.id} className='task-card'>
+                <h2>{t.title}</h2>
+                <p>
+                  <StatusBadge kind={t.status === 'ready' ? 'ok' : 'wait'}>
+                    {t.status === 'ready' ? '動画登録済み' : '動画の登録待ち'}
+                  </StatusBadge>
+                </p>
+                {t.videoAssetId && <Asset id={t.videoAssetId} video />}
+                {t.generationJobs
+                  ?.filter((j: any) => j.learnerId === chosen)
+                  .map((j: any) => (
+                    <p key={j.jobId}>
+                      生成状態：
+                      <StatusBadge kind={badgeKindOf(j.status)}>
+                        {generationStatusLabels[j.status]}
+                      </StatusBadge>
+                      （対象：
+                      {learners.find((l) => l.learnerId === j.learnerId)?.displayName ??
+                        j.learnerId}
+                      ）{j.modelId === 'fake-fixture' ? '（開発用Fake）' : ''}{' '}
+                      <button onClick={() => go(`/staff/tasks/${t.id}/drafts/${j.draftId}`)}>
+                        下書きを開く
+                      </button>
+                    </p>
+                  ))}
+                <button
+                  disabled={t.status !== 'ready' || busy}
+                  onClick={() =>
+                    void action(async () => {
+                      setBusy(true);
+                      try {
+                        const r = await api(`/tasks/${t.id}/generations`, 'POST', {
+                          learnerId: chosen,
+                        });
+                        go(`/staff/tasks/${t.id}/drafts/${r.draftId}`);
+                      } finally {
+                        setBusy(false);
+                      }
+                    })
+                  }
+                >
+                  AIの下書きを作る
+                </button>
+              </section>
+            ))}
+          </div>
         </>
       )}
     </>
@@ -786,7 +799,7 @@ function Draft({ id, action }: { id: string; action: Action }) {
   };
   return (
     <>
-      <nav>
+      <nav className='staff-nav'>
         <button onClick={() => go('/staff')}>作業一覧</button>
         <button onClick={() => go(`/staff/drafts/${id}/review`)}>確認・承認へ</button>
         <button
@@ -799,7 +812,9 @@ function Draft({ id, action }: { id: string; action: Action }) {
           最新値を取得
         </button>
       </nav>
-      <h1>{manual ? '承認版のコピー' : 'AIの下書き（解釈）'}</h1>
+      <h1 className={manual ? undefined : 'ai-tag'}>
+        {manual ? '承認版のコピー' : 'AIの下書き（解釈）'}
+      </h1>
       {manual && <p role='status'>{source || 'コピー元の承認版を取得中です。'}</p>}
       <p>
         本人：
@@ -808,7 +823,20 @@ function Draft({ id, action }: { id: string; action: Action }) {
           : draft.learnerId === 'b'
             ? 'Bさん（折るを細分化・11工程）'
             : '対象の本人'}{' '}
-        / revision {draft.revision} / {draft.status}
+        / revision {draft.revision} /{' '}
+        <span
+          className={`badge badge-css ${
+            draft.status === 'failed'
+              ? 'badge-fail'
+              : draft.status === 'approved'
+                ? 'badge-ok'
+                : draft.status === 'generating'
+                  ? 'badge-progress'
+                  : 'badge-wait'
+          }`}
+        >
+          {draft.status}
+        </span>
       </p>
       {!manual && draft.status === 'generating' ? (
         <p role='status'>動画解析中です。3秒ごとに状態を確認しています。</p>
@@ -906,12 +934,12 @@ function Draft({ id, action }: { id: string; action: Action }) {
           </p>
           <fieldset disabled={busy}>
             <legend>工程の編集と確認</legend>
-            <div className='workspace'>
+            <div className='workspace draft-workspace'>
               <aside>
                 {task?.videoAssetId && <Asset id={task.videoAssetId} video />}
                 {!manual && (
                   <>
-                    <h2>AIの候補・確認が必要な点</h2>
+                    <h2 className='ai-tag'>AIの候補・確認が必要な点</h2>
                     {draft.aiProposal?.reviewFlags.map((f: string) => (
                       <p key={f}>{f}</p>
                     ))}
@@ -1068,7 +1096,7 @@ function Draft({ id, action }: { id: string; action: Action }) {
                 ))}
               </div>
             </div>
-            <section>
+            <section className='approval-bar'>
               <h2>承認までに必要な確認・再確認</h2>
               {missing.length ? (
                 <ul>
@@ -1111,6 +1139,7 @@ function Draft({ id, action }: { id: string; action: Action }) {
                 編集と確認を保存
               </button>
               <button
+                className='primary'
                 aria-describedby={approvalDisabledReason ? 'approval-disabled-reason' : undefined}
                 disabled={
                   busy ||
@@ -1177,6 +1206,7 @@ function Draft({ id, action }: { id: string; action: Action }) {
           aria-label='職員用本人表示プレビュー'
         >
           <section
+            className='preview'
             onKeyDown={(e) => {
               if (e.key === 'Escape') closePreview();
               if (e.key === 'Tab') {
@@ -1205,7 +1235,7 @@ function Draft({ id, action }: { id: string; action: Action }) {
                 <option value='photo_text'>写真＋短文</option>
               </select>
             </label>
-            <div aria-label='本人への提示内容'>
+            <div aria-label='本人への提示内容' className='device'>
               <p>
                 工程 {preview + 1} / {steps.length}
               </p>
@@ -1220,7 +1250,7 @@ function Draft({ id, action }: { id: string; action: Action }) {
                 </>
               )}
             </div>
-            <aside>
+            <aside className='staff-check'>
               <h2>職員の確認用</h2>
               <p>代替テキスト：{steps[preview].imageAltText || steps[preview].text}</p>
               {previewMode === 'photo_only' && (
@@ -1287,13 +1317,19 @@ function Handover({
       <p>承認版だけを表示します。</p>
       {releaseId && release?.releaseId === releaseId ? (
         <>
-          <button onClick={() => go(staff ? '/staff/handover' : '/handover')}>一覧へ</button>
-          <p>
+          <button className='secondary' onClick={() => go(staff ? '/staff/handover' : '/handover')}>
+            一覧へ
+          </button>
+          <p className='ho-approved'>
+            <svg viewBox='0 0 24 24' aria-hidden='true' focusable='false'>
+              <path d='M4 12.5l5 5L20 6.5' />
+            </svg>
             承認者 {release.approvedBy} / {new Date(release.approvedAt).toLocaleString('ja-JP')}
           </p>
           {staff && (
             <>
               <button
+                className='secondary'
                 disabled={copying || !items.some((r) => r.releaseId === releaseId)}
                 onClick={async () => {
                   const state = (copyStates.current[releaseId] ??= { sending: false });
@@ -1324,20 +1360,30 @@ function Handover({
           {release.learnerSteps.map((s: any, i: number) => {
             const g = release.staffGuide[i];
             return (
-              <section key={s.stepId}>
+              <section key={s.stepId} className='ho-step'>
                 <h2>
                   {i + 1}：{s.text}
                 </h2>
                 <div className='two'>
                   <Asset id={s.imageAssetId} />
-                  <div>
-                    <p>{s.visibleCaution}</p>
-                    <p>確認した動作：{g.verifiedObservation}</p>
-                    <p>確認した声：{g.verifiedSpeech || '記録なし'}</p>
-                    <p>声かけ・待つ位置：{g.coaching}</p>
-                    <p>完成基準：{g.completionCheck}</p>
+                  <div className='ho-notes'>
+                    <p className={s.visibleCaution ? 'ho-caution' : undefined}>
+                      {s.visibleCaution}
+                    </p>
                     <p>
-                      原動画：{g.sourceStartMs}–{g.sourceEndMs} ms
+                      <b>確認した動作</b>：{g.verifiedObservation}
+                    </p>
+                    <p>
+                      <b>確認した声</b>：{g.verifiedSpeech || '記録なし'}
+                    </p>
+                    <p>
+                      <b>声かけ・待つ位置</b>：{g.coaching}
+                    </p>
+                    <p>
+                      <b>完成基準</b>：{g.completionCheck}
+                    </p>
+                    <p>
+                      <b>原動画</b>：{g.sourceStartMs}–{g.sourceEndMs} ms
                     </p>
                     <Asset
                       id={release.videoAssetId}
@@ -1352,6 +1398,7 @@ function Handover({
           })}
           {!staff && (
             <button
+              className='primary'
               onClick={() =>
                 void action(async () => {
                   setRead((await api(`/handover/releases/${releaseId}/read`, 'POST', {})).readAt);
@@ -1365,7 +1412,7 @@ function Handover({
         </>
       ) : (
         <>
-          <label>
+          <label className='ho-filter'>
             本人で絞り込む
             <select value={filter} onChange={(e) => setFilter(e.target.value)}>
               <option value=''>すべて</option>
@@ -1382,20 +1429,24 @@ function Handover({
           {items
             .filter((r) => !filter || r.learnerId === filter)
             .map((r) => (
-              <section key={r.releaseId}>
-                <h2>
-                  {r.title} / {r.displayName} / 版 {r.version}
-                </h2>
-                <p>
-                  承認者 {r.approvedBy} / {new Date(r.approvedAt).toLocaleString('ja-JP')}
-                </p>
+              <section key={r.releaseId} className='ho-release'>
+                <div className='ho-release-head'>
+                  <h2>
+                    {r.title} / {r.displayName} / 版 {r.version}
+                  </h2>
+                  <p>
+                    承認者 {r.approvedBy} / {new Date(r.approvedAt).toLocaleString('ja-JP')}
+                  </p>
+                </div>
                 <button
+                  className='primary'
                   onClick={() => go(`${staff ? '/staff' : ''}/handover/releases/${r.releaseId}`)}
                 >
                   教え方を見る
                 </button>
                 {staff ? (
                   <button
+                    className='secondary'
                     onClick={() =>
                       void action(async () => {
                         await api(`/assignments/${r.learnerId}/${r.taskId}`, 'PUT', {
@@ -1672,6 +1723,7 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
         : support?.status === 'acknowledged'
           ? '対応が終わりました'
           : '職員をよんでいます';
+  const waitingTone = waitingTones[waitingLabel] ?? 'open';
   return (
     <div className='learner'>
       <p className='eyebrow'>職員が確認した手順</p>
@@ -1742,21 +1794,31 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
             ))}
         </>
       ) : safety.stopped || storageError || session?.status === 'stopped' ? (
-        <section>
-          <h1 className='learner-state'>{learnerControlContent('作業をやめました')}</h1>
-          <p>職員と そうだんしてください</p>
-          <p className='learner-state' role='status'>
-            {safety.pending.length > 0 &&
-              learnerControlContent(sendFailed ? '送れませんでした' : '送信中')}
-            {storageError ? storageMessage : message}
-          </p>
+        <section className='result result-stop'>
+          <div className='result-main'>
+            <h1 className='learner-state'>{learnerControlContent('作業をやめました')}</h1>
+          </div>
+          <div className='next-card'>
+            <p className='next-label'>つぎは</p>
+            <p className='next-text'>{rubyText('職員と そうだんしてください')}</p>
+            <p className='learner-state' role='status'>
+              {safety.pending.length > 0 &&
+                learnerControlContent(sendFailed ? '送れませんでした' : '送信中')}
+              {storageError ? storageMessage : message}
+            </p>
+          </div>
         </section>
       ) : safety.waiting || session?.status === 'waiting_help' ? (
-        <section>
+        <section className={`wait wait-${waitingTone}`}>
           <h1 className='learner-state' role='status'>
             {learnerControlContent(waitingLabel)}
           </h1>
-          <p role='status'>{message}</p>
+          <p
+            role='status'
+            className={waitingLabel === '送れませんでした' ? 'wait-note wait-strong' : 'wait-note'}
+          >
+            {message}
+          </p>
           <button
             disabled={busy || safety.pending.length > 0 || !session}
             onClick={() =>
@@ -1782,43 +1844,54 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
           </button>
         </section>
       ) : session?.status === 'completed' ? (
-        <section>
-          <h1 className='learner-state'>{learnerControlContent('おわりました')}</h1>
-          <p>職員をよんでください</p>
-          <button className='primary' onClick={() => go('/me')}>
-            {learnerControlContent('おわります')}
-          </button>
+        <section className='result result-done'>
+          <div className='result-main'>
+            <h1 className='learner-state'>{learnerControlContent('おわりました')}</h1>
+          </div>
+          <div className='next-card'>
+            <p className='next-label'>つぎは</p>
+            <p className='next-text'>{rubyText('職員をよんでください')}</p>
+            <button className='primary' onClick={() => go('/me')}>
+              {learnerControlContent('おわります')}
+            </button>
+          </div>
         </section>
       ) : session ? (
-        <section>
-          <p className='learner-state'>{learnerControlContent('作業中')}</p>
-          <p className='position'>
-            {session.stepIndex + 1} / {session.steps.length}
-          </p>
-          <Asset id={step!.imageAssetId} alt={step!.imageAltText} />
-          {step!.text !== undefined && <h1>{step!.text}</h1>}
-          {step!.audioAssetId && <Asset key={step!.audioAssetId} id={step!.audioAssetId} audio />}
-          {step!.visibleCaution !== undefined && <p>{step!.visibleCaution}</p>}
-          <div className='controls'>
-            <button
-              disabled={busy || session.stepIndex === 0}
-              onClick={() => void action(() => event('back'))}
-            >
-              {learnerControlContent('もどる')}
-            </button>
-            <button
-              className='primary'
-              disabled={busy}
-              onClick={() =>
-                void action(() =>
-                  event(session.stepIndex === session.steps.length - 1 ? 'complete' : 'next'),
-                )
-              }
-            >
-              {learnerControlContent(
-                session.stepIndex === session.steps.length - 1 ? 'おわる' : 'つぎへ',
-              )}
-            </button>
+        <section className='work'>
+          <div className='work-photo'>
+            <Asset id={step!.imageAssetId} alt={step!.imageAltText} />
+          </div>
+          <div className='work-side'>
+            <p className='learner-state'>{learnerControlContent('作業中')}</p>
+            <p className='position'>
+              いま <b>{session.stepIndex + 1}</b> / {session.steps.length}
+            </p>
+            {step!.text !== undefined && <h1 className='step-text'>{step!.text}</h1>}
+            {step!.visibleCaution !== undefined && (
+              <p className='caution'>{step!.visibleCaution}</p>
+            )}
+            {step!.audioAssetId && <Asset key={step!.audioAssetId} id={step!.audioAssetId} audio />}
+            <div className='controls'>
+              <button
+                disabled={busy || session.stepIndex === 0}
+                onClick={() => void action(() => event('back'))}
+              >
+                {learnerControlContent('もどる')}
+              </button>
+              <button
+                className='primary'
+                disabled={busy}
+                onClick={() =>
+                  void action(() =>
+                    event(session.stepIndex === session.steps.length - 1 ? 'complete' : 'next'),
+                  )
+                }
+              >
+                {learnerControlContent(
+                  session.stepIndex === session.steps.length - 1 ? 'おわる' : 'つぎへ',
+                )}
+              </button>
+            </div>
           </div>
         </section>
       ) : (
@@ -1855,8 +1928,52 @@ function learnerControlContent(label: LearnerPictogramLabel) {
       >
         <path d={learnerControlPath(label)} />
       </svg>
-      <span>{label}</span>
+      <span>{rubyText(label)}</span>
     </>
   );
 }
+// 固定文言の漢字にだけルビを付ける。工程文・注意・代替テキスト・状態メッセージには使わない。
+const RUBY_READINGS: Record<string, string> = {
+  職員: 'しょくいん',
+  作業: 'さぎょう',
+  対応: 'たいおう',
+  送信: 'そうしん',
+  担当: 'たんとう',
+  音声: 'おんせい',
+  手: 'て',
+  伝: 'つだ',
+  終: 'お',
+  近: 'ちか',
+  送: 'おく',
+  決: 'き',
+  中: 'ちゅう',
+  読: 'よ',
+  上: 'あ',
+};
+// 長い語を先に照合する（「送信」を「送」より先に）。
+const RUBY_PATTERN = new RegExp(
+  `(${Object.keys(RUBY_READINGS)
+    .sort((a, b) => b.length - a.length)
+    .join('|')})`,
+);
+function rubyText(text: string) {
+  return text.split(RUBY_PATTERN).map((part, i) =>
+    RUBY_READINGS[part] ? (
+      <ruby key={i}>
+        {part}
+        <rt aria-hidden='true'>{RUBY_READINGS[part]}</rt>
+      </ruby>
+    ) : (
+      part
+    ),
+  );
+}
+// 支援待ちカードの見た目（色・枠）だけを状態の絵と同じ判定結果から選ぶ。
+const waitingTones: Partial<Record<LearnerPictogramLabel, string>> = {
+  送信中: 'sending',
+  送れませんでした: 'failed',
+  担当が決まりました: 'claimed',
+  対応中: 'claimed',
+  対応が終わりました: 'claimed',
+};
 createRoot(document.getElementById('root')!).render(<App />);

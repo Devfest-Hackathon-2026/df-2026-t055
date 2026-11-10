@@ -39,7 +39,9 @@ function nodes(tree: any): any[] {
 }
 function text(tree: any): string {
   if (Array.isArray(tree)) return tree.map(text).join('');
-  if (React.isValidElement(tree)) return text((tree.props as any).children);
+  // ルビの読み（rt）は aria-hidden なので、表示名・アクセシブル名には数えない。
+  if (React.isValidElement(tree))
+    return tree.type === 'rt' ? '' : text((tree.props as any).children);
   return tree == null ? '' : String(tree);
 }
 const main = await readFile(new URL('../apps/web/src/main.tsx', import.meta.url), 'utf8');
@@ -197,6 +199,34 @@ test('送信・待機・担当決定・対応・停止・失敗は色に依存�
     '送れませんでした',
   ];
   assert.equal(new Set(labels.map(learnerControlPath)).size, labels.length);
+});
+
+test('読み上げボタンの漢字にルビを付け、読みは支援技術から隠してアクセシブル名を変えない', async () => {
+  hooks.reset();
+  const fetchBefore = globalThis.fetch;
+  globalThis.fetch = (async () => ({ ok: true, blob: async () => new Blob(['audio']) })) as any;
+  try {
+    renderAsset('voice', { audio: true });
+    await hooks.flush();
+    const button = nodes(renderAsset('voice', { audio: true })).find((n) => n.type === 'button');
+    assert.equal(text(button), '読み上げる');
+    assert.equal(button.props['aria-label'], undefined);
+    const rts = nodes(button).filter((n) => n.type === 'rt');
+    assert.deepEqual(
+      rts.map((n) => n.props.children),
+      ['よ', 'あ'],
+    );
+    assert.ok(rts.every((n) => n.props['aria-hidden'] === 'true'));
+    assert.deepEqual(
+      nodes(button)
+        .filter((n) => n.type === 'ruby')
+        .map((n) => (n.props.children as any[])[0]),
+      ['読', '上'],
+    );
+  } finally {
+    globalThis.fetch = fetchBefore;
+    hooks.reset();
+  }
 });
 
 test('CSS contract: native focus, non-color disabled cue, narrow and 200% text wrapping', async () => {

@@ -27,6 +27,23 @@ export function useEffect(fn,deps){const i=cursor++;if(!state[i]||deps.some((v,j
 export async function flush(){for(const fn of effects)fn();await new Promise(r=>setImmediate(r));}`;
 const hookUrl = 'data:text/javascript;base64,' + Buffer.from(hookSource).toString('base64');
 const hooks = await import(hookUrl);
+// 職員画面の状態バッジ（status-badge.tsx）も実物を読み込む。
+const badgeUrl =
+  'data:text/javascript;base64,' +
+  Buffer.from(
+    ts
+      .transpileModule(
+        await readFile(new URL('../apps/web/src/status-badge.tsx', import.meta.url), 'utf8'),
+        {
+          compilerOptions: {
+            jsx: ts.JsxEmit.React,
+            target: ts.ScriptTarget.ES2022,
+            module: ts.ModuleKind.ESNext,
+          },
+        },
+      )
+      .outputText.replace("'react'", JSON.stringify(import.meta.resolve('react'))),
+  ).toString('base64');
 let source = await readFile(new URL('../apps/web/src/main.tsx', import.meta.url), 'utf8');
 source =
   source.slice(source.indexOf('function Staff('), source.indexOf('function Draft(')) +
@@ -38,6 +55,7 @@ source = `import React, {useState,useEffect,useRef} from ${JSON.stringify(hookUr
 import {missingDraftChecks,draftPreviewMode,savedDraftReview,generationFailureReason} from ${JSON.stringify(new URL('../apps/web/src/draft-review.ts', import.meta.url).href)};
 import {isManualDraft,releaseCopySource,beginReleaseCopy} from ${JSON.stringify(new URL('../apps/web/src/release-copy.ts', import.meta.url).href)};
 import {releaseCopyResponseSchema,improvementRetryInputSchema,generationJobStatusSchema} from ${JSON.stringify(new URL('../packages/shared/src/index.ts', import.meta.url).href)};
+import {StatusBadge,badgeKindOf} from ${JSON.stringify(badgeUrl)};
 const ImprovementReview=()=>null;
 export const StaffSupport=()=>null; const subscribeStaffSupport=()=>()=>{}; const StaffLearners=()=>null;
 const api=(...args)=>globalThis.draftApi(...args); const go=(path)=>globalThis.draftGo?.(path); const Asset=()=>null;

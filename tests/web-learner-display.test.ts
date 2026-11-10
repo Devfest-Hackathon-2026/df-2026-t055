@@ -42,7 +42,8 @@ function nodes(tree: any): any[] {
 }
 function text(tree: any): string {
   if (Array.isArray(tree)) return tree.map(text).join('');
-  if (React.isValidElement(tree)) return text((tree.props as any).children);
+  if (React.isValidElement(tree))
+    return tree.type === 'rt' ? '' : text((tree.props as any).children);
   return tree == null ? '' : String(tree);
 }
 function button(tree: any, label: string) {
@@ -186,6 +187,15 @@ for (const mode of ['photo_only', 'photo_text'])
     assert.ok(h.calls.every((c) => c.url.startsWith('/me/sessions/session')));
     assert.deepEqual(initial, before);
   });
+test('読み上げ操作は audioAssetId のある工程だけに出る', async () => {
+  const h = harness(session('photo_text', true)),
+    audioNodes = (t: any) => assets(t).filter((a) => a.props.audio);
+  let tree = await open(h);
+  assert.equal(audioNodes(tree).length, 1);
+  await click(tree, 'つぎへ');
+  assert.equal(audioNodes(h.render()).length, 0);
+  assert.equal(audioNodes(await open(harness(session('photo_text', false)))).length, 0);
+});
 test('silent release has no playback UI; legacy image receives caption as alt', async () => {
   let h = harness(session('photo_only', false)),
     tree = await open(h);
