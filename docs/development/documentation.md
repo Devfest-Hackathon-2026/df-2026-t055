@@ -91,6 +91,10 @@ listは機能文書を毎回読み、JSONに全件数・抽出件数・実装/�
 
 checkはYAML・必須項目・列挙値・機能ID重複・コード/テスト/証拠の参照先・ローカルMarkdownリンクとアンカー・ルートの文書配置・各ディレクトリ索引を検査する。文書検査は要件の実装完了を判定しない。CIでも実行する。
 
+通常のコミット時はLefthookの `pre-commit` の `docs-check` が `devenv shell -- npm run docs:check` を実行し、失敗するとコミットを中止する。文書から参照するコード・テストの削除も検出するため、ステージしたファイルの種類に関係なく作業ツリー全体を検査する。未ステージ・未追跡の文書も検査対象となり、ステージ内容だけの検査ではない。既存設定に従いmerge・rebase・cherry-pick・revert時はpre-commit全体をスキップする。
+
+フックの導入はcloneごとに `devenv shell -- npm install` のprepare処理、または `devenv shell -- lefthook install` で行う。ステージ済みファイルがない状態でも文書検査ジョブだけを確認する場合は `devenv shell -- lefthook run --force --job docs-check pre-commit` を実行する。
+
 ## 変更時の手順
 
 1. 索引と目的・安全条件、担当機能、共通契約、最新監査を読む。
