@@ -545,7 +545,11 @@ function Draft({ id, action }: { id: string; action: Action }) {
   };
   const load = async () => {
     const d = (await api(`/drafts/${id}`)).draft;
-    setJob(d.jobId ? await api(`/jobs/${d.jobId}`) : undefined);
+    setJob(
+      d.jobId
+        ? await api(`/jobs/${encodeURIComponent(d.jobId)}`).catch(() => undefined)
+        : undefined,
+    );
     setDraft(d);
     setGenerationFailure('');
     if (!isManualDraft(d) && d.status === 'failed' && d.jobId) {
