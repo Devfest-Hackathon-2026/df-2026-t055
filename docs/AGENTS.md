@@ -122,4 +122,5 @@ status: stable
 - 文書の実体はREADME以外すべてdocsへ置く。ルートAGENTS.mdはこの文書へのシンボリックリンクとして保持する。本文中のコマンド・コードパスはリポジトリルート基準。
 - Pythonを使用する場合もdevenv環境内でuvを使う。ホストのPythonを直接呼ばない。
 - 機能変更のPRでは該当する機能仕様の本文とフロントマターの実装・検証・証拠を更新する。[文書運用](development/documentation.md)に従い `devenv shell -- npm run docs:check` を実行する。
+- 設計判断の背景・選択肢・理由は[ADR](adr/index.md)へ記録し、[記録と更新の手順](development/adr.md)に従う。`status` はOKFの `draft / stable / deprecated` に統一し、採否は本文に記す。ADRで正本を上書きせず、採用する仕様変更は同じPRで機能仕様・共通契約に反映する。
 - Issueは機能仕様のパスと受入条件を参照する。Issueのclose・PRのmergeだけで実装完了や検証済みにしない。旧節番号は[移行表](development/spec-migration.md)から解決する。

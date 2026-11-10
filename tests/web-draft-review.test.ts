@@ -57,6 +57,7 @@ import {isManualDraft,releaseCopySource,beginReleaseCopy} from ${JSON.stringify(
 import {releaseCopyResponseSchema,improvementRetryInputSchema,generationJobStatusSchema} from ${JSON.stringify(new URL('../packages/shared/src/index.ts', import.meta.url).href)};
 import {StatusBadge,badgeKindOf} from ${JSON.stringify(badgeUrl)};
 const ImprovementReview=()=>null;
+export const StaffSupport=()=>null; const subscribeStaffSupport=()=>()=>{}; const StaffLearners=()=>null;
 const api=(...args)=>globalThis.draftApi(...args); const go=(path)=>globalThis.draftGo?.(path); const Asset=()=>null;
 export ${source}`;
 const compiled = ts.transpileModule(source, {
@@ -66,7 +67,7 @@ const compiled = ts.transpileModule(source, {
     module: ts.ModuleKind.ESNext,
   },
 }).outputText;
-const { Staff, Draft, Handover } = await import(
+const { Staff, StaffSupport, Draft, Handover } = await import(
   'data:text/javascript;base64,' + Buffer.from(compiled).toString('base64')
 );
 function nodes(tree: any): any[] {
@@ -239,6 +240,14 @@ for (const [errorCode, reason] of [
   });
 }
 
+test('下書きの更新ボタンは編集・生成中・失敗のいずれも最新値を取得と表示する', async () => {
+  for (const status of ['editing', 'generating', 'failed']) {
+    const tree = await open(harness({ status }));
+    assert.ok(button(tree, '最新値を取得'));
+    assert.equal(button(tree, '再取得'), undefined);
+  }
+});
+
 test('job fetch and validation failures remain safe and can be fetched again', async () => {
   for (const mode of ['network', 'schema', 'mismatch']) {
     const h = harness({ status: 'failed', jobId: 'failed-job' });
@@ -260,10 +269,13 @@ test('job fetch and validation failures remain safe and can be fetched again', a
       },
     });
     let tree = await open(h);
-    assert.match(text(tree), /失敗理由を取得できませんでした/);
+    assert.match(
+      text(tree),
+      /失敗理由を取得できませんでした。「最新値を取得」で確認してください。/,
+    );
     assert.doesNotMatch(text(tree), /private|MODEL_|制限時間内/);
     recovered = true;
-    button(tree, '再取得').props.onClick();
+    button(tree, '最新値を取得').props.onClick();
     await settle();
     tree = h.render();
     assert.match(text(tree), /AIからの応答が制限時間内に返りませんでした/);
@@ -290,6 +302,109 @@ test('review helpers list missing steps and flags, default mode, and validate se
     ],
   );
   assert.throws(() => savedDraftReview({ revision: 2 }));
+});
+test('approval describes every missing check immediately after the button and clears when ready', async () => {
+  const h = harness({
+    reviewChecks: { presentationConfirmed: false, flagResolution: '', steps: {} },
+  });
+  let tree = await open(h);
+  const approve = button(tree, 'この内容を承認');
+  assert.equal(approve.props.disabled, true);
+  assert.ok(approve.props['aria-describedby']);
+  const reason = nodes(tree).find((n) => n.props.id === approve.props['aria-describedby']);
+  assert.ok(reason);
+  assert.equal(nodes(tree)[nodes(tree).indexOf(approve) + 1], reason);
+  assert.equal(
+    text(reason),
+    `承認するには、次の確認が必要です：${missingDraftChecks(h.server.editedSteps, h.server.reviewChecks, true).join('、')}`,
+  );
+  for (const label of ['動画照合済み', '写真・説明確認済み', '本人への提示内容確認済み']) {
+    change(tree, label, true);
+    tree = h.render();
+  }
+  change(tree, '確認が必要な点への対応記録', '対応済み');
+  tree = h.render();
+  assert.equal(button(tree, 'この内容を承認').props.disabled, false);
+  assert.equal(button(tree, 'この内容を承認').props['aria-describedby'], undefined);
+  assert.equal(
+    nodes(tree).some((n) => n.props.id === reason.props.id),
+    false,
+  );
+});
+test('approval describes a conflict even when all review checks are complete', async () => {
+  const h = harness();
+  let tree = await open(h);
+  h.setFail(409);
+  button(tree, '編集と確認を保存').props.onClick();
+  await settle();
+  tree = h.render();
+  const approve = button(tree, 'この内容を承認');
+  assert.equal(approve.props.disabled, true);
+  assert.ok(approve.props['aria-describedby']);
+  const reason = nodes(tree).find((n) => n.props.id === approve.props['aria-describedby']);
+  assert.equal(nodes(tree)[nodes(tree).indexOf(approve) + 1], reason);
+  assert.equal(text(reason), '状態が変わりました。「最新値を取得」して確認してください。');
+  button(tree, '最新値を取得').props.onClick();
+  await settle();
+  tree = h.render();
+  assert.equal(button(tree, 'この内容を承認').props.disabled, false);
+  assert.equal(button(tree, 'この内容を承認').props['aria-describedby'], undefined);
+});
+test('approval explains a pending improvement source and clears after it loads', async () => {
+  const h = harness({ origin: 'improvement', sourceReleaseId: 'source' });
+  const request = (globalThis as any).draftApi;
+  let finish!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  (globalThis as any).draftApi = async (...args: any[]) => {
+    if (args[0] === '/handover/releases/source') await pending;
+    return request(...args);
+  };
+  let tree = await open(h);
+  const approve = button(tree, 'この内容を承認');
+  assert.equal(approve.props.disabled, true);
+  assert.ok(approve.props['aria-describedby']);
+  const reason = nodes(tree).find((n) => n.props.id === approve.props['aria-describedby']);
+  assert.equal(text(reason), 'コピー元の承認版の読み込みが終わっていません。');
+  finish();
+  await settle();
+  tree = h.render();
+  assert.equal(button(tree, 'この内容を承認').props.disabled, false);
+  assert.equal(button(tree, 'この内容を承認').props['aria-describedby'], undefined);
+});
+test('approval hides disabled reasons while saving and restores them afterwards', async () => {
+  const h = harness({
+    reviewChecks: { presentationConfirmed: false, flagResolution: '', steps: {} },
+  });
+  let tree = await open(h);
+  const reasonId = button(tree, 'この内容を承認').props['aria-describedby'];
+  assert.ok(reasonId);
+  const request = (globalThis as any).draftApi;
+  let finish!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  (globalThis as any).draftApi = async (...args: any[]) => {
+    if (args[1] === 'PATCH') await pending;
+    return request(...args);
+  };
+  button(tree, '編集と確認を保存').props.onClick();
+  tree = h.render();
+  assert.equal(button(tree, 'この内容を承認').props.disabled, true);
+  assert.equal(button(tree, 'この内容を承認').props['aria-describedby'], undefined);
+  assert.equal(
+    nodes(tree).some((n) => n.props.id === reasonId),
+    false,
+  );
+  finish();
+  await settle();
+  tree = h.render();
+  assert.equal(button(tree, 'この内容を承認').props['aria-describedby'], reasonId);
+  assert.match(
+    text(nodes(tree).find((n) => n.props.id === reasonId)),
+    /承認するには、次の確認が必要です：/,
+  );
 });
 test('labelled edits PATCH presentation and alt, server checks replace local checks, re-confirm then approve', async () => {
   const h = harness();
@@ -422,7 +537,8 @@ test('他職員が承認済みにした後の最新値取得は承認画面へ�
   tree = h.render();
   assert.match(text(tree), /承認済みです/);
   assert.ok(button(tree, '承認版を確認・本人へ割当'));
-  assert.equal(button(tree, '最新値を取得'), undefined);
+  // 文言統一後は取得ボタンが承認画面のナビにも残るため、編集用の保存ボタンが消えたことで承認画面への遷移を確認する。
+  assert.equal(button(tree, '編集と確認を保存'), undefined);
 });
 test('preview starts in draft mode, separates hidden caution and coaching, switches with keyboard-native select', async () => {
   const h = harness();
@@ -871,6 +987,156 @@ test('候補のFake表記は保存済みジョブのmodelIdだけを使い、表
   }
 });
 
+test('支援要求を含む職員画面は同じ5つのナビを同じ順序と遷移先で表示する', () => {
+  const navigation = [
+    ['作業一覧', '/staff'],
+    ['本人一覧・登録', '/staff/learners'],
+    ['＋ 手本を登録', '/staff/tasks/new'],
+    ['支援要求', '/staff/support'],
+    ['承認版を確認・割当', '/staff/handover'],
+  ];
+  let destination = '';
+  Object.assign(globalThis, { draftGo: (path: string) => (destination = path) });
+  for (const [, path] of navigation) {
+    hooks.reset();
+    const tree = Staff({ path, action: async (fn: any) => fn() });
+    const navs = nodes(tree).filter((n) => n.type === 'nav');
+    assert.equal(navs.length, 1);
+    assert.deepEqual(
+      nodes(navs[0])
+        .filter((n) => n.type === 'button')
+        .map(text),
+      navigation.map(([label]) => label),
+    );
+    for (const [label, target] of navigation) {
+      button(navs[0], label).props.onClick();
+      assert.equal(destination, target);
+    }
+    if (path === '/staff/support') {
+      const support = nodes(tree).find((n) => n.type === StaffSupport);
+      assert.ok(support);
+      assert.ok(nodes(tree).indexOf(navs[0]) < nodes(tree).indexOf(support));
+    }
+  }
+  hooks.reset();
+});
+
+test('作業一覧は有効な本人選択を保ち、存在しない初期IDを先頭へ補正して生成対象に使う', async () => {
+  for (const ids of [['learner-c', 'learner-d'], ['b', 'a'], []]) {
+    hooks.reset();
+    const posts: any[] = [];
+    Object.assign(globalThis, {
+      draftApi: async (url: string, method = 'GET', body?: any) => {
+        if (method === 'POST') {
+          posts.push({ url, body });
+          return { draftId: 'next-draft' };
+        }
+        if (url === '/tasks') return { tasks: [{ id: 'task', title: '作業', status: 'ready' }] };
+        if (url === '/learners')
+          return {
+            items: ids.map((learnerId) => ({ learnerId, displayName: learnerId, preferences: {} })),
+          };
+        throw Error('unexpected');
+      },
+    });
+    const render = () => {
+      hooks.begin();
+      return Staff({ path: '/staff', action: async (fn: any) => fn() });
+    };
+    render();
+    await hooks.flush();
+    let tree = render();
+    const expected = ids.includes('a') ? 'a' : (ids[0] ?? 'a');
+    assert.equal(input(tree, '本人プロフィール').props.value, expected);
+    if (!ids.length) continue;
+    button(tree, 'AIの下書きを作る').props.onClick();
+    await settle();
+    assert.deepEqual(posts[0], { url: '/tasks/task/generations', body: { learnerId: expected } });
+    change(tree, '本人プロフィール', ids[1]);
+    tree = render();
+    button(tree, 'AIの下書きを作る').props.onClick();
+    await settle();
+    assert.deepEqual(posts[1], { url: '/tasks/task/generations', body: { learnerId: ids[1] } });
+  }
+  hooks.reset();
+});
+
+test('引継ぎの本人選択肢は承認版の表示名を使い、本人IDで重複を除いて絞り込める', async () => {
+  const releases = [
+    {
+      releaseId: 'one',
+      learnerId: 'learner-c',
+      displayName: '登録した名前',
+      title: '作業1',
+      version: 1,
+    },
+    {
+      releaseId: 'two',
+      learnerId: 'learner-c',
+      displayName: '登録した名前',
+      title: '作業2',
+      version: 2,
+    },
+    {
+      releaseId: 'three',
+      learnerId: 'learner-d',
+      displayName: '登録した名前',
+      title: '作業3',
+      version: 1,
+    },
+  ];
+  for (const staff of [false, true]) {
+    hooks.reset();
+    Object.assign(globalThis, {
+      draftApi: async (url: string) => {
+        assert.equal(url, '/handover/releases');
+        return { releases };
+      },
+    });
+    const render = () => {
+      hooks.begin();
+      return Handover({ path: '/handover', action: async (fn: any) => fn(), staff });
+    };
+    assert.deepEqual(
+      nodes(input(render(), '本人で絞り込む'))
+        .filter((n) => n.type === 'option')
+        .map(text),
+      ['すべて'],
+    );
+    await hooks.flush();
+    let tree = render();
+    const options = nodes(input(tree, '本人で絞り込む')).filter((n) => n.type === 'option');
+    assert.deepEqual(
+      options.map((n) => [n.props.value, text(n)]),
+      [
+        ['', 'すべて'],
+        ['learner-c', '登録した名前'],
+        ['learner-d', '登録した名前'],
+      ],
+    );
+    assert.equal(nodes(tree).filter((n) => n.type === 'section').length, 3);
+    change(tree, '本人で絞り込む', 'learner-d');
+    tree = render();
+    assert.deepEqual(
+      nodes(tree)
+        .filter((n) => n.type === 'h2')
+        .map(text),
+      ['作業3 / 登録した名前 / 版 1'],
+    );
+    change(tree, '本人で絞り込む', 'learner-c');
+    tree = render();
+    assert.deepEqual(
+      nodes(tree)
+        .filter((n) => n.type === 'h2')
+        .map(text),
+      ['作業1 / 登録した名前 / 版 1', '作業2 / 登録した名前 / 版 2'],
+    );
+    change(tree, '本人で絞り込む', '');
+    assert.equal(nodes(render()).filter((n) => n.type === 'section').length, 3);
+  }
+  hooks.reset();
+});
+
 test('生成前のボタンはモデルを断定せず、作業一覧のFake表記は各ジョブのmodelIdに従う', async () => {
   for (const modelId of ['fake-fixture', 'gemini-test', undefined]) {
     hooks.reset();
@@ -911,7 +1177,7 @@ test('生成前のボタンはモデルを断定せず、作業一覧のFake表�
   }
 });
 
-test('作業一覧は生成状態を日本語で示し、各ジョブの対象本人と下書きを区別する', async () => {
+test('作業一覧は選択中の本人の生成状態を日本語で示し、選択を変えるとジョブと下書きが切り替わる', async () => {
   hooks.reset();
   const db = new MemoryRepository();
   seed(db);
@@ -921,7 +1187,8 @@ test('作業一覧は生成状態を日本語で示し、各ジョブの対象�
     { id: 'running', status: 'running', learnerId: 'b' },
     { id: 'success-a', status: 'succeeded', learnerId: 'a', modelId: 'fake-fixture' },
     { id: 'success-b', status: 'succeeded', learnerId: 'b' },
-    { id: 'failed', status: 'failed', learnerId: 'missing-learner' },
+    { id: 'failed', status: 'failed', learnerId: 'a' },
+    { id: 'missing', status: 'failed', learnerId: 'missing-learner' },
   ];
   for (const job of jobs)
     db.put(
@@ -950,17 +1217,31 @@ test('作業一覧は生成状態を日本語で示し、各ジョブの対象�
   };
   render();
   await hooks.flush();
-  const rows = nodes(render()).filter((n) => n.type === 'p' && text(n).startsWith('生成状態：'));
+  let tree = render();
+  assert.equal(input(tree, '本人プロフィール').props.value, 'a');
+  let rows = nodes(tree).filter((n) => n.type === 'p' && text(n).startsWith('生成状態：'));
   assert.deepEqual(rows.map(text), [
     '生成状態：生成待ち（対象：Aさん） 下書きを開く',
-    '生成状態：生成中（対象：Bさん） 下書きを開く',
     '生成状態：生成完了（対象：Aさん）（開発用Fake） 下書きを開く',
-    '生成状態：生成完了（対象：Bさん） 下書きを開く',
-    '生成状態：生成失敗（対象：missing-learner） 下書きを開く',
+    '生成状態：生成失敗（対象：Aさん） 下書きを開く',
   ]);
   rows.forEach((row, index) => {
     button(row, '下書きを開く').props.onClick();
-    assert.equal(destination, `/staff/tasks/task/drafts/draft-${jobs[index].id}`);
+    assert.equal(
+      destination,
+      `/staff/tasks/task/drafts/draft-${['queued', 'success-a', 'failed'][index]}`,
+    );
+  });
+  change(tree, '本人プロフィール', 'b');
+  tree = render();
+  rows = nodes(tree).filter((n) => n.type === 'p' && text(n).startsWith('生成状態：'));
+  assert.deepEqual(rows.map(text), [
+    '生成状態：生成中（対象：Bさん） 下書きを開く',
+    '生成状態：生成完了（対象：Bさん） 下書きを開く',
+  ]);
+  rows.forEach((row, index) => {
+    button(row, '下書きを開く').props.onClick();
+    assert.equal(destination, `/staff/tasks/task/drafts/draft-${['running', 'success-b'][index]}`);
   });
   hooks.reset();
 });

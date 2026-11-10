@@ -2,11 +2,13 @@
 # or by hand with `npm exec lefthook install`.
 #
 # The project had no formatter before this change, so the hooks are kept narrow:
-#   - pre-commit only touches the files that are actually staged,
+#   - pre-commit formatting only touches the files that are actually staged,
 #   - formatting is auto-fixed and re-staged, so a commit is never blocked just
 #     because the code was not formatted yet,
 #   - lint findings are printed but do not block the commit (CI stays the gate),
 #     so an unrelated pre-existing warning cannot stop an urgent commit,
+#   - documentation integrity is checked across the working tree and failures
+#     block the commit, including when only code or deletions are staged,
 #   - merge / rebase / cherry-pick / revert commits are skipped entirely.
 # Use `LEFTHOOK=0 git commit ...` to bypass the hooks for a single command.
 
@@ -28,6 +30,10 @@ pre-commit:
     - revert
   parallel: true
   jobs:
+    - name: docs-check
+      # Validate all references, even when no Markdown files are staged.
+      run: devenv shell -- npm run docs:check
+
     - name: format
       glob: '*.{ts,tsx,mts,cts,js,jsx,mjs,cjs,json,jsonc,html,css}'
       run: node_modules/.bin/oxfmt --no-error-on-unmatched-pattern {staged_files}
