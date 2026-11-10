@@ -40,7 +40,7 @@ sources:
 | normative | product / features / contractsの共通契約 / architecture / validation / project / research/sources.md / developmentの採用済み規則 | 正本 |
 | policy | 開発エージェントの作業ルール | 開発手順。機能要件の追加根拠にはしない |
 | operational | デプロイと運用手順 | 採用要件を変更しない |
-| reference | 調査資料 | 根拠と限界を読む。推奨だけで機能を採用しない |
+| reference | 調査資料・ADR・テンプレート | 根拠と限界を読む。推奨や判断記録だけで機能を採用しない |
 | example | API例 | 正本と共有型の具体例 |
 | evidence | 実装監査記録 | 検証範囲・未確認事項の証拠 |
 | historical | archive | 当時の履歴。現行仕様に優先しない |
@@ -51,6 +51,8 @@ READMEは製品紹介のまま保つ。文書の実体はdocsへ集約し、ル�
 ## フロントマター
 
 すべての概念文書に`type`・`title`・`authority`・`status`を置く。OKFの`status`は文書のライフサイクル（draft / stable / deprecated）で、実装状態とは別。
+
+[ADR（設計判断の記録）](adr.md)も同じ `status` を使う。採用・不採用・保留は本文の「決定」に記録し、`accepted` 等のADR独自の値を `status` に追加しない。ADRの `authority` は `reference` とし、採用要件は機能仕様・共通契約に反映する。
 
 機能文書には`feature_id`・`scope`・`implementation`・`verification`・`assessed_commit`・`owner`・`issues`・`code`・`tests`・`evidence`・`gaps`を置く。パスから拡張子を除いたものがOKFの概念IDであり、`feature_id`は一覧・Issue対応用のプロジェクト内識別子とする。
 

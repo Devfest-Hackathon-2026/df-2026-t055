@@ -12,6 +12,7 @@ okf_version: "0.2"
 
 - [開発エージェントの入口](AGENTS.md)
 - [プロダクト仕様の移行案内](PRODUCT_SPEC.md)
+- [ADR（設計判断の記録）](adr/index.md)
 - [architecture](architecture/index.md)
 - [archive](archive/index.md)
 - [contracts](contracts/index.md)
