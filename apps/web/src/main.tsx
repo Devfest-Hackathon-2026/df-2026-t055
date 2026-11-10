@@ -437,6 +437,12 @@ function FirebaseLogin({ error }: { error: string }) {
 }
 type Action = (fn: () => Promise<void>) => Promise<void>;
 function Staff({ path, action }: { path: string; action: Action }) {
+  const generationStatusLabels: Record<string, string> = {
+    queued: '生成待ち',
+    running: '生成中',
+    succeeded: '生成完了',
+    failed: '生成失敗',
+  };
   const [tasks, setTasks] = useState<any[]>([]),
     [learners, setLearners] = useState<any[]>([]),
     [chosen, setChosen] = useState('a'),
@@ -523,7 +529,8 @@ function Staff({ path, action }: { path: string; action: Action }) {
               {t.videoAssetId && <Asset id={t.videoAssetId} video />}
               {t.generationJobs?.map((j: any) => (
                 <p key={j.jobId}>
-                  生成状態：{j.status}
+                  生成状態：{generationStatusLabels[j.status]}（対象：
+                  {learners.find((l) => l.learnerId === j.learnerId)?.displayName ?? j.learnerId}）
                   {j.modelId === 'fake-fixture' ? '（開発用Fake）' : ''}{' '}
                   <button onClick={() => go(`/staff/tasks/${t.id}/drafts/${j.draftId}`)}>
                     下書きを開く
