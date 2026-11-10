@@ -300,6 +300,60 @@ test('identity endpoint returns only the verified UID and role', async () => {
   assert.deepEqual(await learner.json(), { schemaVersion: '1', uid: 'learner-a', role: 'learner' });
 });
 
+test('Firebase error codes preserve HTTP classification and hide provider details', async (t) => {
+  const { db } = setup();
+  const log = t.mock.method(console, 'error', () => {});
+  const cases = [
+    ['auth/id-token-expired', 'expired', 401, undefined],
+    ['auth/id-token-revoked', 'revoked', 401, undefined],
+    ['auth/user-disabled', 'disabled', 401, undefined],
+    ['auth/invalid-id-token', 'invalid', 401, undefined],
+    ['auth/argument-error', 'Decoding Firebase ID token failed.', 401, undefined],
+    ['auth/argument-error', 'connection refused', 503, 'other'],
+    ['auth/invalid-credential', 'credential failure', 503, 'auth/invalid-credential'],
+    ['auth/insufficient-permission', 'permission failure', 503, 'auth/insufficient-permission'],
+    ['auth/internal-error', 'service failure', 503, 'auth/internal-error'],
+    ['unknown PRIVATE_TOKEN', 'unknown failure', 503, 'other'],
+  ] as const;
+  for (const [code, message, status, category] of cases) {
+    log.mock.resetCalls();
+    const auth = new FirebaseAuth(
+      db,
+      {
+        async verifyIdToken(token, checkRevoked) {
+          assert.equal(token, 'PRIVATE_TOKEN');
+          assert.equal(checkRevoked, true);
+          throw Object.assign(Error(`${message} PRIVATE_PROVIDER_DETAIL PRIVATE_TOKEN`), {
+            code,
+            uid: 'PRIVATE_UID',
+            email: 'private@example.invalid',
+          });
+        },
+      },
+      'demo',
+    );
+    const response = await createApp({ db, auth }).app.fetch(
+      new Request('http://localhost/api/v1/tasks', {
+        headers: { authorization: 'Bearer PRIVATE_TOKEN' },
+      }),
+    );
+    assert.equal(response.status, status, `${code}: ${message}`);
+    const body = await response.text();
+    assert.equal(
+      JSON.parse(body).error.code,
+      status === 401 ? 'UNAUTHENTICATED' : 'AUTH_SERVICE_UNAVAILABLE',
+    );
+    assert.doesNotMatch(
+      body,
+      /PRIVATE_|private@example\.invalid|Decoding Firebase|connection refused/,
+    );
+    assert.deepEqual(
+      log.mock.calls.map((call) => call.arguments),
+      category ? [[JSON.stringify({ event: 'firebase_auth_verification_failed', category })]] : [],
+    );
+  }
+});
+
 test('Firebase SDK distinguishes invalid tokens from unavailable verification without exposing secrets', async () => {
   class OfflineAgent extends Agent {
     createConnection(): never {
