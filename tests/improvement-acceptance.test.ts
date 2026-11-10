@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../apps/api/src/app.ts';
 import { MemoryRepository, doc, seed } from '../apps/api/src/adapters.ts';
+import { generationJobStatusSchema } from '../packages/shared/src/generation.ts';
 
 function setup() {
   const db = new MemoryRepository();
@@ -128,10 +129,17 @@ test('source assignment and record ownership are checked on new requests', async
 
 test('failed improvement exposes only its scoped retry input and accepts a new idempotent job', async () => {
   const { db, body, post } = setup();
+  const assignmentBefore = structuredClone(db.get('assignments', 'assignment'));
   const firstResponse = await post(body);
   const first = (await firstResponse.json()) as { jobId: string; draftId: string };
   const job = db.get('generationJobs', first.jobId)!;
-  db.put('generationJobs', { ...job, status: 'failed' });
+  db.put('generationJobs', {
+    ...job,
+    status: 'failed',
+    errorCode: 'MODEL_TIMEOUT',
+    internalException: 'private provider exception',
+    rawOutput: 'private generated output',
+  });
   db.put('drafts', { ...db.get('drafts', first.draftId)!, status: 'failed' });
   const app = createApp({ db }).app;
   const getJob = (token: string) =>
@@ -143,19 +151,17 @@ test('failed improvement exposes only its scoped retry input and accepts a new i
   assert.equal((await getJob('learner-a')).status, 403);
   assert.equal((await getJob('newcomer')).status, 403);
   assert.equal((await getJob('other-staff')).status, 403);
-  const data = (await (await getJob('staff')).json()) as {
-    retryInput: {
-      learnerId: string;
-      sourceReleaseId: string;
-      supportInputs: typeof body.supportInputs;
-    };
-  };
+  const data = generationJobStatusSchema.parse(await (await getJob('staff')).json());
+  assert.equal(data.jobId, first.jobId);
+  assert.equal(data.kind, 'guide');
+  assert.equal(data.errorCode, 'MODEL_TIMEOUT');
   assert.deepEqual(data.retryInput, {
     learnerId: body.learnerId,
     sourceReleaseId: body.sourceReleaseId,
     supportInputs: body.supportInputs,
   });
   assert.equal(JSON.stringify(data).includes('private raw note'), false);
+  assert.doesNotMatch(JSON.stringify(data), /private provider exception|private generated output/);
   const retry = { ...data.retryInput, clientRequestId: 'retry-key' };
   const response = await post(retry);
   assert.equal(response.status, 202);
@@ -170,6 +176,7 @@ test('failed improvement exposes only its scoped retry input and accepts a new i
     db.get('generationJobs', next.jobId)!.inputSnapshot.supportInputs,
     body.supportInputs,
   );
+  assert.deepEqual(db.get('assignments', 'assignment'), assignmentBefore);
   const record = db.get('supportRecords', 'record')!;
   db.put('supportRecords', { ...record, revision: 2 });
   assert.equal((await post({ ...retry, clientRequestId: 'different-key' })).status, 409);
