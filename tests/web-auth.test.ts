@@ -167,3 +167,16 @@ test('web socket fetches a fresh token for each connection and cancels pending a
     else Reflect.deleteProperty(globalThis, 'location');
   }
 });
+
+test('login screen shows the brand logo above the unchanged heading', () => {
+  hooks.reset();
+  const all = nodes(renderLogin());
+  const img = all.find((n) => n.type === 'img');
+  assert.ok(img);
+  assert.equal(img.props.src, '/shigodeki-logo.png');
+  assert.equal(img.props.alt, 'しごでき');
+  assert.equal(img.props.className, 'login-logo');
+  const h1 = all.find((n) => n.type === 'h1');
+  assert.equal(h1.props.children, 'ログイン');
+  assert.ok(all.indexOf(img) < all.indexOf(h1));
+});

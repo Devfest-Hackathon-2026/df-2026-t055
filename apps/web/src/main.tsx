@@ -325,12 +325,13 @@ function App() {
       <header>
         <a
           href='#'
+          className='brand'
           onClick={(e) => {
             e.preventDefault();
             go(role === 'staff' ? '/staff' : role === 'newcomer' ? '/handover' : '/me');
           }}
         >
-          しごでき
+          <img src='/shigodeki-logo.png' alt='しごでき' className='brand-logo' />
         </a>
         {authMode === 'demo' ? (
           <>
@@ -390,6 +391,7 @@ function FirebaseLogin({ error }: { error: string }) {
     [busy, setBusy] = useState(false);
   return (
     <section>
+      <img src='/shigodeki-logo.png' alt='しごでき' className='login-logo' />
       <h1>ログイン</h1>
       {(error || failure) && (
         <p role='alert' className='error'>
