@@ -363,7 +363,9 @@ function App() {
         )}
       </header>
       <main key={uid}>
-        <p className='notice'>生成候補は職員の原動画照合・承認が必要です。</p>
+        {role !== 'learner' && (
+          <p className='notice'>生成候補は職員の原動画照合・承認が必要です。</p>
+        )}
         {error && (
           <div role='alert' className='error'>
             {error}
