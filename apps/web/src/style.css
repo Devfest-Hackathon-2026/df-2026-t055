@@ -133,6 +133,7 @@ fieldset{min-width:0}
 /* Handover and learner profile screens. */
 main button.secondary{background:#fff;border:2px solid var(--btn2-edge);color:var(--deep);min-height:44px}
 main button.secondary:hover{background:#e7f3ed}
+main button.secondary:disabled,main button.secondary:disabled:hover{background:#e8efec;color:#4f6965;border:2px dashed #4f6965;cursor:not-allowed;opacity:1}
 .ho-filter{max-width:none}
 .ho-filter select{display:block;width:320px;max-width:100%;min-height:44px;margin-top:6px;font-size:1rem}
 .ho-release{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;background:#fff;border:1px solid var(--card-edge);border-radius:14px;padding:20px;margin:16px 0;box-shadow:none}

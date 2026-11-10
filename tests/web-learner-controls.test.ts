@@ -247,7 +247,7 @@ test('CSS contract: native focus, non-color disabled cue, narrow and 200% text w
   // one flexible column and normal wrapping. Real layout/keyboard/AT remain unverified.
 });
 
-test('CSS contract: UI colors meet 4.5:1 contrast and old low-contrast values are gone', async () => {
+test('CSS contract: values read from style.css meet 4.5:1 contrast and old low-contrast values are gone', async () => {
   const css = await readFile(new URL('../apps/web/src/style.css', import.meta.url), 'utf8');
   const luminance = (hex: string) => {
     const [r, g, b] = [1, 3, 5].map((i) => {
@@ -260,24 +260,63 @@ test('CSS contract: UI colors meet 4.5:1 contrast and old low-contrast values ar
     const [a, b] = [luminance(fg), luminance(bg)].sort((x, y) => y - x);
     return (a + 0.05) / (b + 0.05);
   };
-  const pairs: Array<[string, string[]]> = [
-    ['#3f6c67', ['#ffffff', '#f2f7f5', '#e4eeea']],
-    ['#4f6965', ['#ffffff', '#e8efec']],
-    ['#9a4a00', ['#ffffff', '#f2f7f5', '#e4eeea']],
-    ['#ffd27a', ['#174e4b']],
-    ['#7a5c0c', ['#e4eeea', '#ffe9a3']],
+  const hexOf = (re: RegExp, what: string) => {
+    const m = css.match(re);
+    assert.ok(m, `style.css: could not extract ${what}`);
+    return m[1].toLowerCase();
+  };
+  const variable = (name: string) =>
+    hexOf(new RegExp(`:root\\{[^}]*${name}:(#[0-9a-fA-F]{6})`), name);
+  const check = (label: string, fg: string, bg: string) => {
+    const r = ratio(fg, bg);
+    assert.ok(r >= 4.5, `${label}: ${fg} on ${bg} is ${r.toFixed(2)}:1, below 4.5:1`);
+  };
+  const white = '#ffffff';
+  const [bg, band, deep] = [variable('--bg'), variable('--band'), variable('--deep')];
+  const btn2Edge = variable('--btn2-edge');
+  const helpEdge = variable('--help-edge');
+  const helpBg = variable('--help-bg');
+  for (const b of [white, bg, band]) check('--btn2-edge', btn2Edge, b);
+  for (const b of [band, helpBg, white]) check('--help-edge', helpEdge, b);
+  const focus = hexOf(
+    /button:focus-visible,[^{]*\{outline:4px solid (#[0-9a-fA-F]{6});outline-offset:3px\}/,
+    'focus outline',
+  );
+  for (const b of [white, bg, band]) check('focus outline', focus, b);
+  const headerFocus = hexOf(
+    /header :focus-visible\{outline-color:(#[0-9a-fA-F]{6})\}/,
+    'header focus outline',
+  );
+  check('header focus outline', headerFocus, deep);
+  const inputEdge = hexOf(
+    /input:not\(\[type=checkbox\]\),textarea,select\{border:1px solid (#[0-9a-fA-F]{6})/,
+    'input border',
+  );
+  check('input border', inputEdge, white);
+  const disabledRules: Array<[string, RegExp]> = [
+    ['button:disabled', /(?:^|\})button:disabled\{([^}]*)\}/],
+    ['main button.primary:disabled', /main button\.primary:disabled\{([^}]*)\}/],
+    ['main button.secondary:disabled', /main button\.secondary:disabled[^{]*\{([^}]*)\}/],
   ];
-  for (const [fg, bgs] of pairs) {
-    assert.ok(css.includes(fg), `style.css must contain ${fg}`);
-    for (const bg of bgs) {
-      const r = ratio(fg, bg);
-      assert.ok(r >= 4.5, `${fg} on ${bg} is ${r.toFixed(2)}:1, below 4.5:1`);
-    }
+  for (const [name, re] of disabledRules) {
+    const body = css.match(re)?.[1];
+    assert.ok(body, `style.css: could not extract ${name}`);
+    const bgColor = body.match(/background:(#[0-9a-fA-F]{6})/)?.[1];
+    const color = body.match(/(?:^|;)color:(#[0-9a-fA-F]{6})/)?.[1];
+    const edge = body.match(/border:2px dashed (#[0-9a-fA-F]{6})/)?.[1];
+    assert.ok(
+      bgColor && color && edge,
+      `${name}: background/color/dashed border not found in "${body}"`,
+    );
+    check(`${name} text`, color, bgColor);
+    check(`${name} border`, edge, bgColor);
+    assert.ok(body.includes('dashed'), `${name} must keep a non-color cue (dashed)`);
   }
   assert.ok(!css.includes('#e3a830'));
   assert.ok(!/(input|textarea|select)[^{]*\{[^}]*#8ea6a3/.test(css));
   assert.ok(!css.includes('#8ea6a3'));
   assert.ok(!css.includes('#568580'));
   assert.ok(!css.includes('#b0882b'));
+  assert.ok(!css.includes('#8a6a12'));
   assert.ok(!css.includes('opacity:.45'));
 });
