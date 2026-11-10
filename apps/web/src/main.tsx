@@ -2,7 +2,7 @@ import { ImprovementReview } from './improvement-review.tsx';
 import {
   learnerControlPath,
   imageFailureText,
-  type LearnerControlLabel,
+  type LearnerPictogramLabel,
 } from './learner-controls.ts';
 import { learnerStepPresentation, type LearnerDisplaySession } from './learner-display.ts';
 import {
@@ -28,6 +28,7 @@ import type {
   EditedStep,
   ReviewChecks,
   LearnerSessionDTO,
+  SupportSummary,
 } from '../../../packages/shared/src/index.ts';
 import {
   hold,
@@ -114,6 +115,8 @@ function Asset({
 }) {
   const [url, setUrl] = useState('');
   const [failedId, setFailedId] = useState('');
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
   useEffect(() => {
     let active = true,
       object = '';
@@ -136,6 +139,10 @@ function Asset({
       if (object) URL.revokeObjectURL(object);
     };
   }, [id]);
+  useEffect(() => {
+    const element = audioRef.current;
+    return () => element?.pause();
+  }, [url]);
   const failure = imageFailureText(alt, !audio && !video && failedId === id);
   if (failure)
     return (
@@ -143,10 +150,56 @@ function Asset({
         {failure}
       </div>
     );
+  if (audio)
+    return (
+      <div>
+        <audio
+          key={id}
+          ref={audioRef}
+          src={url || undefined}
+          preload='metadata'
+          hidden
+          onPlay={() => setPlaying(true)}
+          onPause={() => setPlaying(false)}
+          onEnded={() => setPlaying(false)}
+          onError={() => {
+            setPlaying(false);
+            setFailedId(id);
+          }}
+        />
+        <button
+          type='button'
+          disabled={!url}
+          onClick={async () => {
+            const element = audioRef.current;
+            if (!element) return;
+            if (!element.paused) {
+              element.pause();
+              element.currentTime = 0;
+              return;
+            }
+            setFailedId('');
+            try {
+              await element.play();
+            } catch {
+              setPlaying(false);
+              setFailedId(id);
+            }
+          }}
+        >
+          {learnerControlContent(playing ? '音声をとめる' : '読み上げる')}
+        </button>
+        <p role='status'>
+          {failedId === id
+            ? '音声を再生できません。近くの職員をよんでください'
+            : !url
+              ? '音声を読み込み中'
+              : ''}
+        </p>
+      </div>
+    );
   return url ? (
-    audio ? (
-      <audio key={id} src={url} controls preload='metadata' aria-label='手順の読み上げ' />
-    ) : video ? (
+    video ? (
       <video
         key={`${id}:${startMs}:${endMs}`}
         src={`${url}#t=${startMs / 1000}${endMs === undefined ? '' : ',' + endMs / 1000}`}
@@ -1288,6 +1341,7 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
     [session, setSession] = useState<LearnerDisplaySession>(),
     [safetyTick, setSafetyTick] = useState(0),
     [message, setMessage] = useState(''),
+    [sendFailed, setSendFailed] = useState(false),
     [busy, setBusy] = useState(false),
     [homeHalted, setHomeHalted] = useState(false);
   const sessionRef = useRef(session);
@@ -1325,6 +1379,7 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
             load: () => api(`/me/sessions/${pendingSession}`),
           });
           if (active && pendingKey === key) {
+            setSendFailed(!ok);
             setMessage(
               ok
                 ? readSafety(localStorage, pendingKey).stopped
@@ -1396,7 +1451,7 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
       status: LearnerSessionDTO['status'];
       stepIndex: number;
       revision: number;
-      support?: { requestId: string; revision: number; status: string };
+      support?: SupportSummary;
     }) => {
       if (!active || state.sessionId !== sessionId || readSafety(localStorage, key).stopped) return;
       const previous = sessionRef.current;
@@ -1430,6 +1485,7 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
         status: state.status,
         stepIndex: state.stepIndex,
         revision: state.revision,
+        support: state.support,
       };
       sessionRef.current = updated;
       setSession((previous) => {
@@ -1445,6 +1501,7 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
           status: state.status,
           stepIndex: state.stepIndex,
           revision: state.revision,
+          support: state.support,
         };
       });
       if (state.support && !pending.pending.length)
@@ -1476,6 +1533,7 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
     };
   }, [uid, sessionId, safety.waiting, safety.stopped, session?.status]);
   const requestSafety = (type: 'help' | 'stop') => {
+    setSendFailed(false);
     if (!sessionId) {
       if (pendingHomeSafety.current !== 'stop') pendingHomeSafety.current = type;
       const start = readStart(localStorage, uid);
@@ -1517,6 +1575,18 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
     }
   };
   const step = session ? learnerStepPresentation(session) : undefined;
+  const support = session && 'support' in session ? session.support : undefined;
+  const waitingLabel: LearnerPictogramLabel = safety.pending.length
+    ? sendFailed
+      ? '送れませんでした'
+      : '送信中'
+    : support?.status === 'assigned'
+      ? '担当が決まりました'
+      : support?.status === 'in_progress'
+        ? '対応中'
+        : support?.status === 'acknowledged'
+          ? '対応が終わりました'
+          : '職員をよんでいます';
   return (
     <div className='learner'>
       <p className='eyebrow'>職員が確認した手順</p>
@@ -1577,13 +1647,19 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
         </>
       ) : safety.stopped || session?.status === 'stopped' ? (
         <section>
-          <h1>作業をやめました</h1>
+          <h1 className='learner-state'>{learnerControlContent('作業をやめました')}</h1>
           <p>職員と そうだんしてください</p>
-          <p role='status'>{message}</p>
+          <p className='learner-state' role='status'>
+            {safety.pending.length > 0 &&
+              learnerControlContent(sendFailed ? '送れませんでした' : '送信中')}
+            {message}
+          </p>
         </section>
       ) : safety.waiting || session?.status === 'waiting_help' ? (
         <section>
-          <h1>職員をよんでいます</h1>
+          <h1 className='learner-state' role='status'>
+            {learnerControlContent(waitingLabel)}
+          </h1>
           <p role='status'>{message}</p>
           <button
             disabled={busy || safety.pending.length > 0 || !session}
@@ -1608,11 +1684,12 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
         </section>
       ) : session?.status === 'completed' ? (
         <section>
-          <h1>おわりました</h1>
+          <h1 className='learner-state'>{learnerControlContent('おわりました')}</h1>
           <p>職員をよんでください</p>
         </section>
       ) : session ? (
         <section>
+          <p className='learner-state'>{learnerControlContent('作業中')}</p>
           <p className='position'>
             {session.stepIndex + 1} / {session.steps.length}
           </p>
@@ -1660,7 +1737,7 @@ function Learner({ uid, path, action }: { uid: string; path: string; action: Act
     </div>
   );
 }
-function learnerControlContent(label: LearnerControlLabel) {
+function learnerControlContent(label: LearnerPictogramLabel) {
   return (
     <>
       <svg

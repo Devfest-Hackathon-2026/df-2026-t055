@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import ts from 'typescript';
 import React from 'react';
+import {
+  learnerControlPath,
+  type LearnerPictogramLabel,
+} from '../apps/web/src/learner-controls.ts';
 import { readSafety, safetyKey } from '../apps/web/src/safety.ts';
 
 // Run the actual Learner handlers with fake hooks, without a browser or added dependency.
@@ -109,6 +113,7 @@ function harness() {
     key,
     setWaiting: (pending: any[] = []) =>
       local.setItem(key, JSON.stringify({ stopped: false, waiting: true, pending })),
+    setSession: (patch: object) => Object.assign(session, patch),
     setFailPost: (value: boolean) => {
       failPost = value;
     },
@@ -169,12 +174,14 @@ test('支援状態を区別し、異なる版・古い通知を無視して同�
   update(6, 2, 'assigned');
   tree = h.render();
   assert.match(text(tree), /担当の職員が決まりました/);
+  checkState(tree, '担当が決まりました');
   update(100, 100, 'in_progress', 'wrong-release');
   tree = h.render();
   assert.doesNotMatch(text(tree), /職員が対応しています/);
   update(7, 3, 'in_progress');
   tree = h.render();
   assert.match(text(tree), /職員が対応しています/);
+  checkState(tree, '対応中');
   receive({
     schemaVersion: '1',
     type: 'session.support.updated',
@@ -188,13 +195,15 @@ test('支援状態を区別し、異なる版・古い通知を無視して同�
     },
   });
   tree = h.render();
-  assert.match(text(tree), /職員をよんでいます/);
+  checkState(tree, '対応中');
   update(6, 2, 'assigned');
   tree = h.render();
   assert.match(text(tree), /職員が対応しています/);
+  checkState(tree, '対応中');
   update(8, 4, 'acknowledged');
   tree = h.render();
   assert.match(text(tree), /対応が終わりました/);
+  checkState(tree, '対応が終わりました');
   receive({
     schemaVersion: '1',
     type: 'session.support.updated',
@@ -224,10 +233,14 @@ test('送信待ちの手伝ってが残っている間は待ち表示を解除�
   tree = h.render();
   await hooks.flush();
   tree = h.render();
-  assert.match(text(tree), /職員をよんでいます/);
+  assert.match(text(tree), /送れませんでした/);
+  assert.match(text(tree), /近くの職員をよんでください。送信をやり直しています。/);
+  assert.doesNotMatch(text(tree), /折る/);
   await h.tick();
   tree = h.render();
-  assert.match(text(tree), /職員をよんでいます/);
+  assert.match(text(tree), /送れませんでした/);
+  assert.match(text(tree), /近くの職員をよんでください。送信をやり直しています。/);
+  assert.doesNotMatch(text(tree), /折る/);
   assert.equal(readSafety((globalThis as any).localStorage, h.key).waiting, true);
 });
 
@@ -381,4 +394,64 @@ test('開始応答前に再読込しても同じ開始IDと停止IDで復旧し�
   assert.equal(stop.stopped, true);
   assert.equal(stop.pending[0].clientEventId, 'stop-original');
   assert.match(text(render()), /作業をやめました/);
+});
+
+function checkState(tree: any, label: LearnerPictogramLabel) {
+  const state = nodes(tree).find((n) => n.props.className === 'learner-state' && text(n) === label);
+  assert.ok(state, label);
+  const svg = nodes(state).find((n) => n.type === 'svg');
+  assert.equal(svg.props['aria-hidden'], 'true');
+  assert.equal(svg.props.focusable, 'false');
+  assert.equal(nodes(svg).find((n) => n.type === 'path').props.d, learnerControlPath(label));
+}
+
+for (const [status, supportStatus, label] of [
+  ['active', undefined, '作業中'],
+  ['waiting_help', 'open', '職員をよんでいます'],
+  ['waiting_help', 'assigned', '担当が決まりました'],
+  ['waiting_help', 'in_progress', '対応中'],
+  ['waiting_help', 'acknowledged', '対応が終わりました'],
+  ['stopped', undefined, '作業をやめました'],
+  ['completed', undefined, 'おわりました'],
+] as const) {
+  test(`再読込時の保存済み状態 ${status}/${supportStatus ?? '-'} に絵とラベルを表示する`, async () => {
+    const h = harness();
+    h.setSession({
+      status,
+      ...(supportStatus ? { support: { requestId: 'q', revision: 1, status: supportStatus } } : {}),
+    });
+    h.render();
+    await hooks.flush();
+    const tree = h.render();
+    checkState(tree, label);
+    if (status !== 'active') assert.doesNotMatch(text(tree), /折る/);
+    hooks.reset();
+  });
+}
+
+test('未送信を送信中・失敗として示し、保存完了後だけ支援待ちへ切り替える', async () => {
+  const h = harness();
+  h.render();
+  await hooks.flush();
+  nodes(h.render())
+    .find((n) => n.type === 'button' && text(n) === '手伝って')
+    .props.onClick();
+  let tree = h.render();
+  checkState(tree, '送信中');
+  assert.doesNotMatch(text(tree), /職員をよんでいます|担当が決まりました/);
+  h.setFailPost(true);
+  await hooks.flush();
+  tree = h.render();
+  checkState(tree, '送れませんでした');
+  assert.match(text(tree), /近くの職員をよんでください/);
+  h.setFailPost(false);
+  h.setSession({
+    status: 'waiting_help',
+    support: { requestId: 'q', revision: 1, status: 'open' },
+  });
+  await hooks.flush();
+  await h.tick();
+  checkState(h.render(), '職員をよんでいます');
+  assert.equal(readSafety((globalThis as any).localStorage, h.key).pending.length, 0);
+  hooks.reset();
 });
