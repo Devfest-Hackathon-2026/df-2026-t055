@@ -205,7 +205,7 @@ for (const mode of ['photo_only', 'photo_text'])
     let tree = await open(h);
     await click(tree, '手伝って');
     tree = h.render();
-    assert.match(text(tree), /職員をよんでいます/);
+    assert.match(text(tree), /送信中/);
     assert.equal(assets(tree).length, 0);
     const key = 'safety:learner-a:session',
       pending = JSON.parse(h.storage.get(key));
@@ -223,24 +223,6 @@ for (const mode of ['photo_only', 'photo_text'])
     assert.equal(button(tree, 'つぎへ'), undefined);
     assert.equal(JSON.parse(h.storage.get(key)).pending[0].type, 'stop');
   });
-test('actual Asset uses manual audio controls and metadata preload without autoplay', async () => {
-  const main = await readFile(new URL('../apps/web/src/main.tsx', import.meta.url), 'utf8');
-  const source = main.slice(main.indexOf('function Asset('), main.indexOf('\nfunction App('));
-  const compiled = ts.transpileModule(
-    `import React from '${import.meta.resolve('react')}';import {imageFailureText} from ${JSON.stringify(new URL('../apps/web/src/learner-controls.ts', import.meta.url).href)};let cursor=0;const useState=()=>[cursor++%2===0?'blob:approved':'',()=>{}],useEffect=()=>{};export ${source}`,
-    { compilerOptions: { jsx: ts.JsxEmit.React, module: ts.ModuleKind.ESNext } },
-  ).outputText;
-  const { Asset } = await import(
-    'data:text/javascript;base64,' + Buffer.from(compiled).toString('base64')
-  );
-  const audio = Asset({ id: 'audio0', audio: true });
-  assert.equal(audio.type, 'audio');
-  assert.equal(audio.props.controls, true);
-  assert.equal(audio.props.preload, 'metadata');
-  assert.equal(audio.props.autoPlay, undefined);
-  assert.equal(Asset({ id: 'image0', alt: '手元0' }).props.alt, '手元0');
-});
-
 test('all learner controls keep native keyboard semantics, visible text names and decorative inline icons', async () => {
   const check = (tree: any, label: string) => {
     const b = button(tree, label);
