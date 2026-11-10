@@ -1,3 +1,4 @@
+import { configuredModelConfig } from './model-config.ts';
 import { z } from 'zod';
 import { correctionContextOutputSchema } from '../../../packages/shared/src/generation.ts';
 
@@ -24,11 +25,8 @@ export class FakeCorrectionModel implements CorrectionModel {
 export class VertexCorrectionModel implements CorrectionModel {
   constructor(private env: NodeJS.ProcessEnv = process.env) {}
   async generate(input: CorrectionModelInput, signal?: AbortSignal) {
-    const {
-      GOOGLE_CLOUD_PROJECT: project,
-      GOOGLE_CLOUD_LOCATION: location,
-      VERTEX_MODEL: model,
-    } = this.env;
+    const { GOOGLE_CLOUD_PROJECT: project, GOOGLE_CLOUD_LOCATION: location } = this.env;
+    const { modelId: model } = configuredModelConfig({ ...this.env, MODEL_PROVIDER: 'vertex' });
     if (!project || !location || !model) throw Error('VERTEX_MODEL_NOT_CONFIGURED');
     const { GoogleGenAI } = await import('@google/genai');
     const ai = new GoogleGenAI({ vertexai: true, project, location });
@@ -52,7 +50,7 @@ export class VertexCorrectionModel implements CorrectionModel {
   }
 }
 export function configuredCorrectionModel(env = process.env): CorrectionModel {
-  return env.MODEL_PROVIDER === 'vertex'
+  return configuredModelConfig(env).provider === 'vertex'
     ? new VertexCorrectionModel(env)
     : new FakeCorrectionModel();
 }

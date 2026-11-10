@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import ts from 'typescript';
 import React from 'react';
+import {
+  learnerControlPath,
+  type LearnerPictogramLabel,
+} from '../apps/web/src/learner-controls.ts';
 import { readSafety, safetyKey } from '../apps/web/src/safety.ts';
 
 // Run the actual Learner handlers with fake hooks, without a browser or added dependency.
@@ -20,12 +24,12 @@ const hooks = await import(hookUrl);
 let source = await readFile(new URL('../apps/web/src/main.tsx', import.meta.url), 'utf8');
 source = source.slice(source.indexOf('function Learner(')).replace(/\ncreateRoot.*$/s, '');
 source = `import React, {useState,useEffect,useRef} from ${JSON.stringify(hookUrl)};
-import {hold, readSafety, flushSafety, safetyKey, clearWaiting, readStart, saveStart, startKey} from ${JSON.stringify(new URL('../apps/web/src/safety.ts', import.meta.url).href)};
+import {hold, readSafety, flushSafety, safetyKey, clearWaiting, readStart, saveStart, clearStart, startKey, storageFailed, safetyKeys} from ${JSON.stringify(new URL('../apps/web/src/safety.ts', import.meta.url).href)};
 import {learnerSupportNotificationSchema} from ${JSON.stringify(new URL('../packages/shared/src/support.ts', import.meta.url).href)};
 import {learnerStepPresentation} from ${JSON.stringify(new URL('../apps/web/src/learner-display.ts', import.meta.url).href)};
 import {learnerControlPath} from ${JSON.stringify(new URL('../apps/web/src/learner-controls.ts', import.meta.url).href)};
 let account = 'learner-a';
-const api=(...args)=>globalThis.learnerApi(...args); const go=()=>{}; const Asset=()=>null;
+const api=(...args)=>globalThis.learnerApi(...args); const go=(path)=>globalThis.learnerGo?.(path); const Asset=()=>null;
 const subscribeSupport=(_token,_session,receive)=>globalThis.learnerSubscribe?.(receive)??(()=>{});
 const getToken = async () => account;
 export ${source}`;
@@ -56,12 +60,18 @@ async function settle() {
 function harness() {
   hooks.reset();
   const store = new Map<string, string>();
+  const storageFailure = { get: false, set: false, remove: false };
   const local = {
-    getItem: (k: string) => store.get(k) ?? null,
+    getItem: (k: string) => {
+      if (storageFailure.get) throw Error('読取不可');
+      return store.get(k) ?? null;
+    },
     setItem: (k: string, v: string) => {
+      if (storageFailure.set) throw Error('保存不可');
       store.set(k, v);
     },
     removeItem: (k: string) => {
+      if (storageFailure.remove) throw Error('削除不可');
       store.delete(k);
     },
     get length() {
@@ -70,6 +80,8 @@ function harness() {
     key: (i: number) => [...store.keys()][i] ?? null,
   };
   (globalThis as any).localStorage = local;
+  const navigations: string[] = [];
+  (globalThis as any).learnerGo = (path: string) => navigations.push(path);
   (globalThis as any).learnerSubscribe = () => () => {};
   const timers = new Map<number, () => void>();
   let timerId = 0;
@@ -98,17 +110,21 @@ function harness() {
     if (path === '/me/assignments') return { assignments: [] };
     return structuredClone(session);
   };
-  const render = () => {
+  const render = (path = '/me/sessions/s1') => {
     hooks.begin();
-    return Learner({ uid: 'learner-a', path: '/me/sessions/s1', action: async (fn: any) => fn() });
+    return Learner({ uid: 'learner-a', path, action: async (fn: any) => fn() });
   };
   const key = safetyKey('learner-a', 's1');
   return {
     render,
     store,
+    session,
     key,
+    storageFailure,
+    navigations,
     setWaiting: (pending: any[] = []) =>
       local.setItem(key, JSON.stringify({ stopped: false, waiting: true, pending })),
+    setSession: (patch: object) => Object.assign(session, patch),
     setFailPost: (value: boolean) => {
       failPost = value;
     },
@@ -169,12 +185,14 @@ test('支援状態を区別し、異なる版・古い通知を無視して同�
   update(6, 2, 'assigned');
   tree = h.render();
   assert.match(text(tree), /担当の職員が決まりました/);
+  checkState(tree, '担当が決まりました');
   update(100, 100, 'in_progress', 'wrong-release');
   tree = h.render();
   assert.doesNotMatch(text(tree), /職員が対応しています/);
   update(7, 3, 'in_progress');
   tree = h.render();
   assert.match(text(tree), /職員が対応しています/);
+  checkState(tree, '対応中');
   receive({
     schemaVersion: '1',
     type: 'session.support.updated',
@@ -188,13 +206,15 @@ test('支援状態を区別し、異なる版・古い通知を無視して同�
     },
   });
   tree = h.render();
-  assert.match(text(tree), /職員をよんでいます/);
+  checkState(tree, '対応中');
   update(6, 2, 'assigned');
   tree = h.render();
   assert.match(text(tree), /職員が対応しています/);
+  checkState(tree, '対応中');
   update(8, 4, 'acknowledged');
   tree = h.render();
   assert.match(text(tree), /対応が終わりました/);
+  checkState(tree, '対応が終わりました');
   receive({
     schemaVersion: '1',
     type: 'session.support.updated',
@@ -224,10 +244,14 @@ test('送信待ちの手伝ってが残っている間は待ち表示を解除�
   tree = h.render();
   await hooks.flush();
   tree = h.render();
-  assert.match(text(tree), /職員をよんでいます/);
+  assert.match(text(tree), /送れませんでした/);
+  assert.match(text(tree), /近くの職員をよんでください。送信をやり直しています。/);
+  assert.doesNotMatch(text(tree), /折る/);
   await h.tick();
   tree = h.render();
-  assert.match(text(tree), /職員をよんでいます/);
+  assert.match(text(tree), /送れませんでした/);
+  assert.match(text(tree), /近くの職員をよんでください。送信をやり直しています。/);
+  assert.doesNotMatch(text(tree), /折る/);
   assert.equal(readSafety((globalThis as any).localStorage, h.key).waiting, true);
 });
 
@@ -381,4 +405,233 @@ test('開始応答前に再読込しても同じ開始IDと停止IDで復旧し�
   assert.equal(stop.stopped, true);
   assert.equal(stop.pending[0].clientEventId, 'stop-original');
   assert.match(text(render()), /作業をやめました/);
+});
+
+function checkState(tree: any, label: LearnerPictogramLabel) {
+  const state = nodes(tree).find((n) => n.props.className === 'learner-state' && text(n) === label);
+  assert.ok(state, label);
+  const svg = nodes(state).find((n) => n.type === 'svg');
+  assert.equal(svg.props['aria-hidden'], 'true');
+  assert.equal(svg.props.focusable, 'false');
+  assert.equal(nodes(svg).find((n) => n.type === 'path').props.d, learnerControlPath(label));
+}
+
+for (const [status, supportStatus, label] of [
+  ['active', undefined, '作業中'],
+  ['waiting_help', 'open', '職員をよんでいます'],
+  ['waiting_help', 'assigned', '担当が決まりました'],
+  ['waiting_help', 'in_progress', '対応中'],
+  ['waiting_help', 'acknowledged', '対応が終わりました'],
+  ['stopped', undefined, '作業をやめました'],
+  ['completed', undefined, 'おわりました'],
+] as const) {
+  test(`再読込時の保存済み状態 ${status}/${supportStatus ?? '-'} に絵とラベルを表示する`, async () => {
+    const h = harness();
+    h.setSession({
+      status,
+      ...(supportStatus ? { support: { requestId: 'q', revision: 1, status: supportStatus } } : {}),
+    });
+    h.render();
+    await hooks.flush();
+    const tree = h.render();
+    checkState(tree, label);
+    if (status !== 'active') assert.doesNotMatch(text(tree), /折る/);
+    hooks.reset();
+  });
+}
+
+test('未送信を送信中・失敗として示し、保存完了後だけ支援待ちへ切り替える', async () => {
+  const h = harness();
+  h.render();
+  await hooks.flush();
+  nodes(h.render())
+    .find((n) => n.type === 'button' && text(n) === '手伝って')
+    .props.onClick();
+  let tree = h.render();
+  checkState(tree, '送信中');
+  assert.doesNotMatch(text(tree), /職員をよんでいます|担当が決まりました/);
+  h.setFailPost(true);
+  await hooks.flush();
+  tree = h.render();
+  checkState(tree, '送れませんでした');
+  assert.match(text(tree), /近くの職員をよんでください/);
+  h.setFailPost(false);
+  h.setSession({
+    status: 'waiting_help',
+    support: { requestId: 'q', revision: 1, status: 'open' },
+  });
+  await hooks.flush();
+  await h.tick();
+  checkState(h.render(), '職員をよんでいます');
+  assert.equal(readSafety((globalThis as any).localStorage, h.key).pending.length, 0);
+  hooks.reset();
+});
+
+function assertStopped(tree: any, storageError = true) {
+  assert.match(text(tree), /作業をやめました/);
+  assert.doesNotMatch(text(tree), /折る|端に注意|つぎへ|もどる|おわる|つづける|はじめる/);
+  assert.equal(
+    nodes(tree).some((node) => node.props.id === 'img'),
+    false,
+  );
+  if (storageError) {
+    const status = nodes(tree).find((node) => node.props.role === 'status');
+    assert.match(text(status), /端末の記録を使えません/);
+    assert.match(text(status), /画面を閉じると送信をやり直せません/);
+    assert.match(text(status), /近くの職員をよんでください/);
+  }
+}
+
+for (const failure of ['get', 'set', 'both'] as const) {
+  test(`${failure}Item例外でもstop押下直後に手順と進行ボタンを閉じ、再送後も停止する`, async () => {
+    const h = harness();
+    h.render();
+    await hooks.flush();
+    const tree = h.render();
+    assert.match(text(tree), /折る/);
+    h.storageFailure.get = failure !== 'set';
+    h.storageFailure.set = failure !== 'get';
+    h.setFailPost(true);
+    nodes(tree)
+      .find((node) => node.type === 'button' && text(node).includes('やめる'))
+      .props.onClick();
+    assertStopped(h.render());
+    await hooks.flush();
+    await h.tick();
+    assertStopped(h.render());
+    const stop = readSafety((globalThis as any).localStorage, h.key);
+    assert.equal(stop.stopped, true);
+    assert.equal(stop.pending.length, 1);
+    h.setFailPost(false);
+    await h.tick();
+    assertStopped(h.render());
+    assert.equal(readSafety((globalThis as any).localStorage, h.key).pending.length, 0);
+  });
+}
+
+for (const key of ['safety:learner-a:s1', 'pending-start:learner-a']) {
+  test(`${key}の不正JSON・不正な構造は破棄せず知らせ、作業を自動再開しない`, async () => {
+    for (const broken of [
+      '{',
+      '',
+      'null',
+      '{}',
+      '[]',
+      '{"stopped":false,"waiting":false,"pending":[{}]}',
+    ]) {
+      const h = harness();
+      h.store.set(key, broken);
+      assertStopped(h.render());
+      await hooks.flush();
+      assertStopped(h.render());
+      await hooks.flush();
+      await h.tick();
+      assertStopped(h.render());
+      assert.equal(h.store.get(key), broken);
+      const tree = h.render();
+      nodes(tree)
+        .find((node) => node.type === 'button' && text(node).includes('やめる'))
+        .props.onClick();
+      assertStopped(h.render());
+      assert.equal(readSafety((globalThis as any).localStorage, h.key).stopped, true);
+      if (key.startsWith('pending-start:')) assertStopped(h.render('/me'));
+    }
+  });
+}
+
+for (const type of ['next', 'resume']) {
+  test(`保存失敗を伴う停止後に遅い${type}応答が届いても手順を再表示しない`, async () => {
+    const h = harness();
+    if (type === 'next') h.session.steps.push({ ...h.session.steps[0], stepId: 's2' });
+    if (type === 'resume') h.setWaiting();
+    h.render();
+    await hooks.flush();
+    h.render();
+    await hooks.flush();
+    const tree = h.render();
+    let resolvePost!: () => void;
+    const pendingPost = new Promise<void>((resolve) => {
+      resolvePost = resolve;
+    });
+    (globalThis as any).learnerApi = async (_path: string, method = 'GET') => {
+      if (method === 'POST') {
+        await pendingPost;
+        return {};
+      }
+      return {
+        sessionId: 's1',
+        releaseId: 'r',
+        status: 'active',
+        stepIndex: 0,
+        revision: 20,
+        steps: [{ stepId: 's1', imageAssetId: 'img', text: '折る' }],
+      };
+    };
+    const work = nodes(tree)
+      .find(
+        (node) =>
+          node.type === 'button' && text(node).includes(type === 'next' ? 'つぎへ' : 'つづける'),
+      )
+      .props.onClick();
+    await settle();
+    h.storageFailure.set = true;
+    nodes(tree)
+      .find((node) => node.type === 'button' && text(node).includes('やめる'))
+      .props.onClick();
+    assertStopped(h.render());
+    resolvePost();
+    await work;
+    await settle();
+    assertStopped(h.render());
+    assert.equal(readSafety((globalThis as any).localStorage, h.key).stopped, true);
+  });
+}
+
+test('開始応答待ちの保存・削除失敗でも停止を保ち、メモリの停止イベントを再送する', async () => {
+  const h = harness();
+  let resolveStart!: (value: unknown) => void;
+  const pendingStart = new Promise((resolve) => {
+    resolveStart = resolve;
+  });
+  const sent: any[] = [];
+  (globalThis as any).learnerApi = async (path: string, _method: string, body: any) => {
+    if (path === '/me/assignments') return { assignments: [{ taskId: 't', title: '作業' }] };
+    if (path === '/me/sessions') return pendingStart;
+    sent.push(body);
+    return {};
+  };
+  h.render('/me');
+  await hooks.flush();
+  const tree = h.render('/me');
+  const work = nodes(tree)
+    .find((node) => node.type === 'button' && text(node).includes('はじめる'))
+    .props.onClick();
+  h.storageFailure.set = true;
+  h.storageFailure.remove = true;
+  nodes(tree)
+    .find((node) => node.type === 'button' && text(node).includes('やめる'))
+    .props.onClick();
+  assertStopped(h.render('/me'));
+  resolveStart({ sessionId: 's1', revision: 5 });
+  await work;
+  await settle();
+  h.render('/me');
+  await hooks.flush();
+  await h.tick();
+  assertStopped(h.render('/me'));
+  assert.deepEqual(h.navigations, []);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].type, 'stop');
+});
+
+test('初回のgetItem例外でも画面が落ちず、本人ホームで開始しない', async () => {
+  const h = harness();
+  h.storageFailure.get = true;
+  assertStopped(h.render());
+  await hooks.flush();
+  assertStopped(h.render());
+  assertStopped(h.render('/me'));
+  await hooks.flush();
+  assertStopped(h.render('/me'));
+  assert.deepEqual(h.navigations, []);
 });

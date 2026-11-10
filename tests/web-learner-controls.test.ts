@@ -2,13 +2,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import ts from 'typescript';
+import React from 'react';
 import {
   learnerControlPath,
   imageFailureText,
   type LearnerControlLabel,
+  type LearnerPictogramLabel,
 } from '../apps/web/src/learner-controls.ts';
 
-test('seven original pictograms are distinct and failures retain approved alt text', () => {
+test('original pictograms and audio controls are distinct and failures retain approved alt text', () => {
   const labels: LearnerControlLabel[] = [
     'はじめる',
     'もどる',
@@ -17,8 +19,10 @@ test('seven original pictograms are distinct and failures retain approved alt te
     '手伝って',
     'やめる',
     'つづける',
+    '読み上げる',
+    '音声をとめる',
   ];
-  assert.equal(new Set(labels.map(learnerControlPath)).size, 7);
+  assert.equal(new Set(labels.map(learnerControlPath)).size, 9);
   assert.notEqual(learnerControlPath('手伝って'), learnerControlPath('やめる'));
   assert.equal(
     imageFailureText('タオルの端を合わせる', true),
@@ -27,61 +31,171 @@ test('seven original pictograms are distinct and failures retain approved alt te
   assert.equal(imageFailureText('手元', false), undefined);
 });
 
-test('actual Asset replaces decode and HTTP failures and recovers on asset change; media unchanged', async () => {
-  const main = await readFile(new URL('../apps/web/src/main.tsx', import.meta.url), 'utf8');
-  const source = main.slice(main.indexOf('function Asset('), main.indexOf('\nfunction App('));
-  const hookSource = `import React from '${import.meta.resolve('react')}';export default React;
-let state=[],cursor=0,last,effects=[];
+function nodes(tree: any): any[] {
+  if (Array.isArray(tree)) return tree.flatMap(nodes);
+  if (!React.isValidElement(tree)) return [];
+  return [tree, ...nodes((tree.props as any).children)];
+}
+function text(tree: any): string {
+  if (Array.isArray(tree)) return tree.map(text).join('');
+  if (React.isValidElement(tree)) return text((tree.props as any).children);
+  return tree == null ? '' : String(tree);
+}
+const main = await readFile(new URL('../apps/web/src/main.tsx', import.meta.url), 'utf8');
+const source =
+  main.slice(main.indexOf('function Asset('), main.indexOf('\nfunction App(')) +
+  main.slice(main.indexOf('function learnerControlContent('), main.indexOf('\ncreateRoot('));
+const hookSource = `import React from '${import.meta.resolve('react')}';export default React;
+let state=[],cursor=0,effects=[],cleanups=[];
 export function begin(){cursor=0;effects=[]}
+export function reset(){cleanups.forEach(f=>f?.());state=[];cleanups=[];begin()}
 export function useState(v){const i=cursor++;if(!(i in state))state[i]=v;return[state[i],v=>state[i]=v]}
-export function useEffect(fn,deps){if(last!==deps[0]){last=deps[0];effects.push(fn)}}
+export function useRef(v){const i=cursor++;return state[i]??={current:v}}
+export function useEffect(fn,deps){const i=cursor++;if(!state[i]||deps.some((v,j)=>v!==state[i][j])){state[i]=deps;effects.push(()=>{cleanups[i]?.();cleanups[i]=fn()})}}
 export async function flush(){effects.forEach(fn=>fn());await new Promise(r=>setImmediate(r))}
 `;
-  const url = 'data:text/javascript;base64,' + Buffer.from(hookSource).toString('base64'),
-    hooks = await import(url);
-  const imports = `import React,{useState,useEffect} from ${JSON.stringify(url)};
-import {imageFailureText} from ${JSON.stringify(new URL('../apps/web/src/learner-controls.ts', import.meta.url).href)};
+const url = 'data:text/javascript;base64,' + Buffer.from(hookSource).toString('base64'),
+  hooks = await import(url);
+const imports = `import React,{useState,useEffect,useRef} from ${JSON.stringify(url)};
+import {imageFailureText,learnerControlPath} from ${JSON.stringify(new URL('../apps/web/src/learner-controls.ts', import.meta.url).href)};
 const getToken=async()=>'test';export `;
-  const compiled = ts.transpileModule(imports + source, {
-    compilerOptions: { jsx: ts.JsxEmit.React, module: ts.ModuleKind.ESNext },
-  }).outputText;
-  const { Asset } = await import(
-    'data:text/javascript;base64,' + Buffer.from(compiled).toString('base64')
-  );
+const compiled = ts.transpileModule(imports + source, {
+  compilerOptions: { jsx: ts.JsxEmit.React, module: ts.ModuleKind.ESNext },
+}).outputText;
+const { Asset } = await import(
+  'data:text/javascript;base64,' + Buffer.from(compiled).toString('base64')
+);
+const renderAsset = (id: string, extra = {}) => {
+  hooks.begin();
+  return Asset({ id, alt: '手元の写真', ...extra });
+};
+
+test('actual Asset replaces decode and HTTP failures and recovers on asset change', async () => {
+  hooks.reset();
   const fetchBefore = globalThis.fetch;
   let ok = true;
   globalThis.fetch = (async () => ({ ok, blob: async () => new Blob(['image']) })) as any;
-  const render = (id: string, extra = {}) => {
-    hooks.begin();
-    return Asset({ id, alt: '手元の写真', ...extra });
-  };
   try {
-    render('one');
+    renderAsset('one');
     await hooks.flush();
-    let tree = render('one');
+    let tree = renderAsset('one');
     assert.equal(tree.type, 'img');
     assert.equal(tree.props.alt, '手元の写真');
     tree.props.onError();
-    tree = render('one');
+    tree = renderAsset('one');
     assert.equal(tree.type, 'div');
     assert.equal(tree.props.role, 'status');
     assert.equal(tree.props.children, '写真を表示できません：手元の写真');
-    render('two');
+    renderAsset('two');
     await hooks.flush();
-    assert.equal(render('two').type, 'img');
+    assert.equal(renderAsset('two').type, 'img');
     ok = false;
-    render('three');
+    renderAsset('three');
     await hooks.flush();
-    assert.equal(render('three').props.children, '写真を表示できません：手元の写真');
-    render('audio', { audio: true });
+    assert.equal(renderAsset('three').props.children, '写真を表示できません：手元の写真');
+    renderAsset('audio', { audio: true });
     await hooks.flush();
-    assert.equal(render('audio', { audio: true }).props.children, '写真・動画を読み込み中');
-    render('video', { video: true });
+    tree = renderAsset('audio', { audio: true });
+    assert.match(text(tree), /音声を再生できません。近くの職員をよんでください/);
+    assert.equal(nodes(tree).find((n) => n.type === 'button').props.disabled, true);
+    renderAsset('video', { video: true });
     await hooks.flush();
-    assert.equal(render('video', { video: true }).props.children, '写真・動画を読み込み中');
+    assert.equal(renderAsset('video', { video: true }).props.children, '写真・動画を読み込み中');
   } finally {
     globalThis.fetch = fetchBefore;
+    hooks.reset();
   }
+});
+
+test('読み上げは名前と絵のある標準ボタンで再生・停止・再聴取でき、失敗と終了を表示に反映する', async () => {
+  hooks.reset();
+  const fetchBefore = globalThis.fetch;
+  globalThis.fetch = (async () => ({ ok: true, blob: async () => new Blob(['audio']) })) as any;
+  let playCount = 0,
+    pauseCount = 0,
+    rejectPlay = false;
+  const element = {
+    paused: true,
+    currentTime: 0,
+    play: async () => {
+      playCount++;
+      if (rejectPlay) throw Error('再生失敗');
+      element.paused = false;
+    },
+    pause: () => {
+      pauseCount++;
+      element.paused = true;
+    },
+  };
+  const checkButton = (tree: any, label: LearnerControlLabel) => {
+    const button = nodes(tree).find((n) => n.type === 'button');
+    assert.equal(text(button), label);
+    assert.equal(button.props.type, 'button');
+    assert.equal(button.props.disabled, false);
+    // Native Enter/Space activation and focus are preserved: no custom key handler or tabindex.
+    assert.equal(button.props.tabIndex, undefined);
+    assert.equal(button.props.onKeyDown, undefined);
+    const svg = nodes(button).find((n) => n.type === 'svg');
+    assert.equal(svg.props['aria-hidden'], 'true');
+    assert.equal(svg.props.focusable, 'false');
+    assert.equal(nodes(svg).find((n) => n.type === 'path').props.d, learnerControlPath(label));
+    return button;
+  };
+  try {
+    let tree = renderAsset('voice', { audio: true });
+    assert.match(text(tree), /音声を読み込み中/);
+    await hooks.flush();
+    tree = renderAsset('voice', { audio: true });
+    const audio = nodes(tree).find((n) => n.type === 'audio');
+    assert.equal(audio.props.controls, undefined);
+    assert.equal(audio.props.autoPlay, undefined);
+    assert.equal(audio.props.preload, 'metadata');
+    audio.props.ref.current = element;
+    await hooks.flush();
+    await checkButton(tree, '読み上げる').props.onClick();
+    audio.props.onPlay();
+    tree = renderAsset('voice', { audio: true });
+    element.currentTime = 3;
+    await checkButton(tree, '音声をとめる').props.onClick();
+    audio.props.onPause();
+    assert.equal(element.currentTime, 0);
+    assert.equal(pauseCount, 1);
+    tree = renderAsset('voice', { audio: true });
+    await checkButton(tree, '読み上げる').props.onClick();
+    assert.equal(playCount, 2);
+    audio.props.onPlay();
+    audio.props.onEnded();
+    element.paused = true;
+    tree = renderAsset('voice', { audio: true });
+    rejectPlay = true;
+    await checkButton(tree, '読み上げる').props.onClick();
+    tree = renderAsset('voice', { audio: true });
+    assert.match(text(tree), /音声を再生できません/);
+    rejectPlay = false;
+    await checkButton(tree, '読み上げる').props.onClick();
+    assert.doesNotMatch(text(renderAsset('voice', { audio: true })), /音声を再生できません/);
+    audio.props.onError();
+    assert.match(text(renderAsset('voice', { audio: true })), /音声を再生できません/);
+    hooks.reset();
+    assert.equal(pauseCount, 2, '画面を閉じると音声も停止する');
+  } finally {
+    globalThis.fetch = fetchBefore;
+    hooks.reset();
+  }
+});
+
+test('送信・待機・担当決定・対応・停止・失敗は色に依存しない異なる形を持つ', () => {
+  const labels: LearnerPictogramLabel[] = [
+    '作業中',
+    '送信中',
+    '職員をよんでいます',
+    '担当が決まりました',
+    '対応中',
+    '対応が終わりました',
+    '作業をやめました',
+    '送れませんでした',
+  ];
+  assert.equal(new Set(labels.map(learnerControlPath)).size, labels.length);
 });
 
 test('CSS contract: native focus, non-color disabled cue, narrow and 200% text wrapping', async () => {
