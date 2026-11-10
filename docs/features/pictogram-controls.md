@@ -8,7 +8,7 @@ feature_id: pictogram-controls
 scope: core
 implementation: present
 verification: automated
-assessed_commit: 91ee00d4a78ddf5c7662c1f83b817c5b6014d0b6
+assessed_commit: ca5b71f936bc6ebde5fc7f5cd2ec36a3a1a802c3
 owner: unassigned
 issues:
   - https://github.com/Genk-AI/df-2026-t055/issues/6
@@ -23,6 +23,7 @@ tests:
   - tests/web-learner-waiting.test.ts
 evidence:
   - docs/implementation-audits/20261110-1409-91ee00d.md
+  - docs/implementation-audits/20261110-1523-e4196ca.md
 gaps:
   - 絵の意味、拡大・支援技術、本人による操作の評価は未検証。
 verification_scope: local-automated-tests
@@ -32,7 +33,7 @@ verification_scope: local-automated-tests
 
 ## 操作と状態を伝えるピクトグラム
 
-- 「手伝って」「やめる」を優先し、「はじめる」「もどる」「つぎへ」「つづける」「おわる」と読み上げの再生にも、大きなピクトグラムと短い文字ラベルを添える。候補は助けを求める人、停止マーク、方向の矢印など。職員はボタンと押した後の結果を本人と確かめ、伝わりにくい場合は絵や提示方法を見直す。
+- 「手伝って」「やめる」を優先し、「はじめる」「もどる」「つぎへ」「つづける」「おわる」「おわります」と読み上げの再生にも、大きなピクトグラムと短い文字ラベルを添える。候補は助けを求める人、停止マーク、方向の矢印など。職員はボタンと押した後の結果を本人と確かめ、伝わりにくい場合は絵や提示方法を見直す。
 - 同じ操作は画面間で形・配置をそろえ、「手伝って」と「やめる」は形でも区別できるようにする。支援送信中、職員の応答待ち、停止済み、送信に失敗して近くの職員を呼ぶ状態を、それぞれ文字と絵で伝える。画像の取得や音声の再生を待たずに操作できるようにする。
 - 色、絵、文字、位置を組み合わせる。キーボード操作と見えるフォーカスを保ち、支援技術が読める操作名を付ける。文字と同じ意味の絵は重複して読み上げないようにする。使用する画像を固定し、端末や拡大表示で見え方を確かめ、出典とライセンスを記録する。
 

@@ -194,6 +194,21 @@ test('legacy Issue links keep all old section headings in the compatibility docu
   assert.equal(headings.length, 15);
 });
 
+test('completion navigation and its pictogram remain in the split specification after main integration', () => {
+  const session = readFileSync(
+    new URL('../docs/features/learner-session.md', import.meta.url),
+    'utf8',
+  );
+  const controls = readFileSync(
+    new URL('../docs/features/pictogram-controls.md', import.meta.url),
+    'utf8',
+  );
+  assert.ok(
+    session.includes('「おわりました」画面の「おわります」を押すと、「きょうの さぎょう」に戻る'),
+  );
+  assert.ok(controls.includes('「おわる」「おわります」'));
+});
+
 test('migration record covers all original requirement lines exactly once', () => {
   const record = JSON.parse(
     readFileSync(new URL('../docs/development/spec-migration.json', import.meta.url), 'utf8'),

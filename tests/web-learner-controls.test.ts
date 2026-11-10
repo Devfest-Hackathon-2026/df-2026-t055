@@ -16,13 +16,14 @@ test('original pictograms and audio controls are distinct and failures retain ap
     'もどる',
     'つぎへ',
     'おわる',
+    'おわります',
     '手伝って',
     'やめる',
     'つづける',
     '読み上げる',
     '音声をとめる',
   ];
-  assert.equal(new Set(labels.map(learnerControlPath)).size, 9);
+  assert.equal(new Set(labels.map(learnerControlPath)).size, labels.length);
   assert.notEqual(learnerControlPath('手伝って'), learnerControlPath('やめる'));
   assert.equal(
     imageFailureText('タオルの端を合わせる', true),
