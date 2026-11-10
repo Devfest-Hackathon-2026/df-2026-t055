@@ -27,6 +27,8 @@ jobs:
         run: npm run format:check
       - name: Lint
         run: npm run lint
+      - name: Documentation integrity
+        run: npm run docs:check
       - name: Typecheck
         run: npm run typecheck
       - name: Test

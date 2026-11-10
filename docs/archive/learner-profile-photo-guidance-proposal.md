@@ -1,3 +1,10 @@
+---
+type: Historical Record
+title: 利用者の特性を登録し、写真のみの作業手順を選べるようにする
+authority: historical
+status: deprecated
+---
+
 # 利用者の特性を登録し、写真のみの作業手順を選べるようにする
 
 提案日：2026年11月7日。

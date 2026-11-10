@@ -1,3 +1,10 @@
+---
+type: Historical Record
+title: 本人向けの操作をピクトグラムで伝える
+authority: historical
+status: deprecated
+---
+
 # 本人向けの操作をピクトグラムで伝える
 
 提案日：2026年11月7日。

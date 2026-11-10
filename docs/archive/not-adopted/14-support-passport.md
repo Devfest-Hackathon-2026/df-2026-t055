@@ -1,3 +1,10 @@
+---
+type: Historical Record
+title: 場所や担当が変わっても使える支援パスポート
+authority: historical
+status: deprecated
+---
+
 # 場所や担当が変わっても使える支援パスポート
 
 - 投稿: 壁打ちで具体化した案

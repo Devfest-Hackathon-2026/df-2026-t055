@@ -1,0 +1,985 @@
+{
+  "schemaVersion": 1,
+  "repository": "Genk-AI/df-2026-t055",
+  "fetched_at": "2026-11-10T05:05:27.519Z",
+  "source": "gh issue list --state all --limit 300 --json number,title,body,state,url",
+  "complete": true,
+  "issues": [
+    {
+      "number": 1,
+      "title": "[P0][Foundation] 既存MVPコードをmainへ移植して正本参照を更新",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/1",
+      "legacy_spec_reference": true,
+      "docs": [],
+      "process_docs": [
+        "docs/development/workflow.md"
+      ]
+    },
+    {
+      "number": 2,
+      "title": "[P0][Contract] 新仕様に合わせ共有型・API契約・fixtureを更新",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/2",
+      "legacy_spec_reference": true,
+      "docs": [],
+      "process_docs": [
+        "docs/development/workflow.md"
+      ]
+    },
+    {
+      "number": 3,
+      "title": "[P0][API] 本人プロフィール登録・更新APIと情報境界を実装",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/3",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/learner-profile.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 4,
+      "title": "[P0][Web] 職員の本人プロフィール登録・編集UIを実装",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/4",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/learner-profile.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 5,
+      "title": "[P0][API] 写真のみモード・代替テキスト・承認版固定を実装",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/5",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/draft-review.md",
+        "docs/features/learner-session.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 6,
+      "title": "[P0][Web] 本人向け1工程表示を写真のみ・ピクトグラム対応",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/6",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/learner-session.md",
+        "docs/features/pictogram-controls.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 7,
+      "title": "[P0][API] 支援要求の開始・完了・支援記録APIを実装",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/7",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/support-records.md",
+        "docs/features/support-workflow.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 8,
+      "title": "[P0][Web] 職員の支援対応・つまずき記録画面を実装",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/8",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/support-records.md",
+        "docs/features/support-workflow.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 9,
+      "title": "[P0][AI] Vertex AI Geminiの実動画解析・結果検査を実装",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/9",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/draft-generation.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 10,
+      "title": "[P0][GCP] Firebase認証・Firestore・Cloud Storageを接続",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/10",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/authentication.md",
+        "docs/features/cloud-platform.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 11,
+      "title": "[P0][Deploy] Cloud Tasks・Cloud Runへデプロイして費用を制御",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/11",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/cloud-platform.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 12,
+      "title": "[P0][QA] エンドツーエンド・認可・承認・停止の受入テスト",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/12",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/handover.md"
+      ],
+      "process_docs": [
+        "docs/validation/acceptance.md"
+      ]
+    },
+    {
+      "number": 13,
+      "title": "[P0][Demo] 作業動画・比較検証・提出資料と公開URLを整える",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/13",
+      "legacy_spec_reference": true,
+      "docs": [],
+      "process_docs": [
+        "docs/product/demo-task.md",
+        "docs/project/submission.md"
+      ]
+    },
+    {
+      "number": 14,
+      "title": "[P1][AI-API] 支援記録から次回用マニュアルの下書きを非同期生成",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/14",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/guide-improvement.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 15,
+      "title": "[P1][Web] 職員の本人別作業一覧・改善指示・差分確認UI",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/15",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/guide-improvement.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 16,
+      "title": "[P1][TTS] Gemini TTSを実接続し承認済み音声として配信",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/16",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/tts.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 17,
+      "title": "[Design Gate] 未確定の設計変更PRを判定し採用後にのみ実装Issue化",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/17",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/speech-input.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 18,
+      "title": "[P1][Automation] Issue単位でAI実装PRを作る運用とチェックを整備",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/18",
+      "legacy_spec_reference": true,
+      "docs": [],
+      "process_docs": [
+        "docs/development/workflow.md"
+      ]
+    },
+    {
+      "number": 19,
+      "title": "[P0][Foundation] 旧MVPの実装資産を現行mainへ移す",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/19",
+      "legacy_spec_reference": true,
+      "docs": [],
+      "process_docs": [
+        "docs/development/workflow.md"
+      ]
+    },
+    {
+      "number": 20,
+      "title": "[P0][撮影担当] タオル包装の手本MP4と比較素材を用意する",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/20",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/draft-generation.md"
+      ],
+      "process_docs": [
+        "docs/product/demo-task.md",
+        "docs/project/submission.md"
+      ]
+    },
+    {
+      "number": 21,
+      "title": "[Design][設計判断] 採用済み4案と残る設計判断を棚卸しする",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/21",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/speech-input.md"
+      ],
+      "process_docs": [
+        "docs/development/workflow.md"
+      ]
+    },
+    {
+      "number": 22,
+      "title": "[Design][設計判断] 支援記録の音声入力方式と全画面展開の採否を決める",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/22",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/speech-input.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 23,
+      "title": "[P0][Foundation] ローカル起動手順と既存デモの動作を確認する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/23",
+      "legacy_spec_reference": true,
+      "docs": [],
+      "process_docs": [
+        "docs/development/workflow.md"
+      ]
+    },
+    {
+      "number": 24,
+      "title": "[P0][Contract] 本人プロフィールの共有スキーマとAPI例を定義する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/24",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/learner-profile.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 25,
+      "title": "[P0][Contract] 下書き・承認版・本人セッションの共有契約を分ける",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/25",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/draft-review.md",
+        "docs/features/manual-revision.md",
+        "docs/features/learner-session.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 26,
+      "title": "[P0][Contract] 支援の状態遷移・記録・通知の共有契約を定義する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/26",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/support-records.md",
+        "docs/features/support-workflow.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 27,
+      "title": "[P0][Contract] 生成入力と手直し履歴・参考メモの共有契約を定義する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/27",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/draft-generation.md",
+        "docs/features/correction-history.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 28,
+      "title": "[P0][GCP] Firestore Repositoryを接続し競合更新を検証する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/28",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/cloud-platform.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 29,
+      "title": "[P0][GCP] 非公開Cloud Storageの資産ストリームと世代固定を実装する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/29",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/cloud-platform.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 30,
+      "title": "[P0][Deploy] web-apiとgeneratorのコンテナをビルド可能にする",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/30",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/cloud-platform.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 31,
+      "title": "[P1][TTS] Vertex TTSの実アダプタと設定を実装する",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/31",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/tts.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 32,
+      "title": "[P1][Automation] PRの型検査・テスト・ビルドをCIで検証する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/32",
+      "legacy_spec_reference": true,
+      "docs": [],
+      "process_docs": [
+        "docs/development/workflow.md"
+      ]
+    },
+    {
+      "number": 33,
+      "title": "[P0][API] 本人プロフィールの登録・一覧・詳細APIを実装する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/33",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/learner-profile.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 34,
+      "title": "[P0][API] 支援要求一覧と職員の担当決定を実装する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/34",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/support-workflow.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 35,
+      "title": "[P0][AI] Vertex VideoModelのSDK接続と入力の許可リストを作る",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/35",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/draft-generation.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 36,
+      "title": "[P0][GCP] Firebase IDトークン認証とデモアカウントの紐づけを作る",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/36",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/authentication.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 37,
+      "title": "[P1][Automation] 1サブIssueから1PRを作るチーム手順を整える",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/37",
+      "legacy_spec_reference": true,
+      "docs": [],
+      "process_docs": [
+        "docs/development/workflow.md"
+      ]
+    },
+    {
+      "number": 38,
+      "title": "[P0][API] 本人プロフィールのrevision付き更新と任意情報削除を実装する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/38",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/learner-profile.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 39,
+      "title": "[P0][Web] 職員の本人一覧とプロフィール登録画面を作る",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/39",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/learner-profile.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 40,
+      "title": "[P0][API] 下書きに作業別の提示設定と代替テキストを保存する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/40",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/draft-review.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 41,
+      "title": "[P0][API] 担当職員の対応開始・完了と停止通知確認を実装する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/41",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/support-workflow.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 42,
+      "title": "[P0][AI] Vertexの生成結果を検証し失敗をジョブへ反映する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/42",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/draft-generation.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 43,
+      "title": "[P0][Web] プロフィール編集・任意情報削除・競合復帰を作る",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/43",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/learner-profile.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 44,
+      "title": "[P0][API] 下書きの変更内容に応じて確認チェックを解除する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/44",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/draft-review.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 45,
+      "title": "[P0][API] 支援記録の取得・後入力・競合更新を実装する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/45",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/support-records.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 46,
+      "title": "[P0][AI] 原動画から候補写真を切り出して下書きへ紐づける",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/46",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/draft-generation.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 47,
+      "title": "[P0][Deploy] Cloud Tasksの配送とgeneratorのOIDC・リースを実装する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/47",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/cloud-platform.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 48,
+      "title": "[P0][API] 確認済み下書きを不変の承認版として保存する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/48",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/draft-review.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 49,
+      "title": "[P0][AI検証] チーム撮影のMP4でVertex出力と生成時間を実測する",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/49",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/draft-generation.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 50,
+      "title": "[P0][Deploy] 費用アラート・生成受付停止・保管期限の運用を整える",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/50",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/cloud-platform.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 51,
+      "title": "[P1][API] 下書きの手直し差分を保存時に履歴へ記録する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/51",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/correction-history.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 52,
+      "title": "[P0][API] 本人セッションに固定版の表示方式と工程だけを返す",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/52",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/learner-session.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 53,
+      "title": "[P0][API] 承認版から手作業用の下書きを作成する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/53",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/manual-revision.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 54,
+      "title": "[P0][Web] 職員の下書き編集に提示プレビューと再確認を追加する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/54",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/draft-review.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 55,
+      "title": "[P1][AI] 手直しの参考メモを非同期生成して履歴に保存する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/55",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/correction-history.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 56,
+      "title": "[P0][API] メディア取得をロールと対象の承認版で制限する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/56",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/authentication.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 57,
+      "title": "[P0][Web] 職員の承認版画面にコピーして直す導線を作る",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/57",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/manual-revision.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 58,
+      "title": "[P0][API] 職員と本人の再開操作を対象の支援要求に結びつける",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/58",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/support-workflow.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 59,
+      "title": "[P1][API] 本人別の作業一覧と支援記録を職員用に取得する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/59",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/guide-improvement.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 60,
+      "title": "[P0][Web] 本人の1工程表示を固定版の2モードに対応させる",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/60",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/learner-session.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 61,
+      "title": "[P0][API] 支援のWebSocket認証とロール別通知を実装する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/61",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/support-workflow.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 62,
+      "title": "[P0][Web] 職員の支援一覧に担当・対応開始・完了を追加する",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/62",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/support-workflow.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 63,
+      "title": "[P0][QA] ロール境界・承認の二重送信・固定版の回帰を確認する",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/63",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/authentication.md"
+      ],
+      "process_docs": [
+        "docs/validation/acceptance.md"
+      ]
+    },
+    {
+      "number": 64,
+      "title": "[P1][API] 支援記録からの改善要求を固定スナップショットで受け付ける",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/64",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/guide-improvement.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 65,
+      "title": "[P1][Web] 職員の本人別作業カードに次回版と改善状態を出す",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/65",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/guide-improvement.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 66,
+      "title": "[P0][Web] 本人の操作ボタンにピクトグラムと短い操作名を付ける",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/66",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/pictogram-controls.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 67,
+      "title": "[P0][Web] 支援記録フォームに後入力と保存失敗時の復帰を作る",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/67",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/support-records.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 68,
+      "title": "[P0][GCP] 支援通知をFirestore購読でCloud Run間に配信する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/68",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/support-workflow.md",
+        "docs/features/cloud-platform.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 69,
+      "title": "[P1][AI・API] 改善ジョブのモデル入力と採用した記録版の保存を実装する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/69",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/guide-improvement.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 70,
+      "title": "[P1][AI] 次回生成に同じ本人・作業の手直し履歴を引き継ぐ",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/70",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/correction-history.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 71,
+      "title": "[P1][Web] 支援記録の選択・送信用要約確認・改善依頼を実装する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/71",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/guide-improvement.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 72,
+      "title": "[P1][Web] 職員の作業詳細で手直し履歴とAI参考メモを確認する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/72",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/correction-history.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 73,
+      "title": "[P1][TTS] 承認時だけ音声を生成し版専用の資産として配信する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/73",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/tts.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 74,
+      "title": "[P0][Web] 本人端末で停止を即時確定し通信回復まで維持する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/74",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/learner-session.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 75,
+      "title": "[P0][Web] 職員の支援一覧をWebSocket更新とHTTPフォールバックに対応させる",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/75",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/support-workflow.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 76,
+      "title": "[P1][Web] 支援記録に訂正して保存できる音声入力を追加する",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/76",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/speech-input.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 77,
+      "title": "[P0][Deploy] Cloud Runへ配置して公開HTTPSと内部ジョブを確認する",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/77",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/cloud-platform.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 78,
+      "title": "[P1][Web] 元版と改善下書きの差分・採用記録を確認する",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/78",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/guide-improvement.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 79,
+      "title": "[P0][Web] 本人の支援待ち画面を担当・再開通知に対応させる",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/79",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/learner-session.md",
+        "docs/features/support-workflow.md"
+      ],
+      "process_docs": []
+    },
+    {
+      "number": 80,
+      "title": "[P0][QA] 実動画から承認・本人提示・新人参照まで結合確認する",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/80",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/handover.md"
+      ],
+      "process_docs": [
+        "docs/validation/acceptance.md"
+      ]
+    },
+    {
+      "number": 81,
+      "title": "[P0][QA] 支援の担当競合・通信断・停止優先を結合確認する",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/81",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/support-workflow.md"
+      ],
+      "process_docs": [
+        "docs/validation/acceptance.md"
+      ]
+    },
+    {
+      "number": 82,
+      "title": "[P0][QA] 本人の表示・ピクトグラム・停止のアクセシビリティを確認する",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/82",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/pictogram-controls.md"
+      ],
+      "process_docs": [
+        "docs/validation/acceptance.md"
+      ]
+    },
+    {
+      "number": 83,
+      "title": "[P0][検証担当] 4方式の比較と初見の引き継ぎを実測する",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/83",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/handover.md"
+      ],
+      "process_docs": [
+        "docs/validation/acceptance.md"
+      ]
+    },
+    {
+      "number": 84,
+      "title": "[P0][提出担当] デモ録画と提出物・公開URLを照合する",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/84",
+      "legacy_spec_reference": true,
+      "docs": [],
+      "process_docs": [
+        "docs/product/demo-task.md",
+        "docs/project/submission.md"
+      ]
+    },
+    {
+      "number": 151,
+      "title": "プロダクトの名前を考える",
+      "state": "OPEN",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/151",
+      "legacy_spec_reference": false,
+      "docs": [],
+      "process_docs": [
+        "docs/product/overview.md"
+      ]
+    },
+    {
+      "number": 154,
+      "title": "[Web] 本人の作業完了画面に「おわります」ボタンを追加してホームに戻れるようにする",
+      "state": "CLOSED",
+      "url": "https://github.com/Genk-AI/df-2026-t055/issues/154",
+      "legacy_spec_reference": true,
+      "docs": [
+        "docs/features/learner-session.md"
+      ],
+      "process_docs": []
+    }
+  ]
+}

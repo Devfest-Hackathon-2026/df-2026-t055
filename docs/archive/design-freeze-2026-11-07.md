@@ -1,3 +1,10 @@
+---
+type: Historical Record
+title: 設計フリーズ：本人に合わせた作業手順の提示
+authority: historical
+status: deprecated
+---
+
 # 設計フリーズ：本人に合わせた作業手順の提示
 
 > **履歴資料（現行仕様ではありません）**：このファイルは採択・設計当時の記録を残すものです。実装・AIエージェントが参照する唯一の正本は [PRODUCT_SPEC.md](../PRODUCT_SPEC.md) です。内容が異なる場合は正本を優先してください。

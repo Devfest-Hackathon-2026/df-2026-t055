@@ -1,3 +1,10 @@
+---
+type: Implementation Audit
+title: 生成受付・費用管理の実装監査
+authority: evidence
+status: stable
+---
+
 # 生成受付・費用管理の実装監査
 
 - 対象: #50。先行するCloud Tasks PRに依存。受付トランザクションで組織単位の操作文書を読み、新規手順生成のみ停止する。文書未作成時は従来どおり受付、異常値は停止する。

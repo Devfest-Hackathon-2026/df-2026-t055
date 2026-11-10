@@ -1,3 +1,10 @@
+---
+type: Historical Record
+title: 設計変更候補：支援中のつまずきを記録し、後から手順を改善する
+authority: historical
+status: deprecated
+---
+
 # 設計変更候補：支援中のつまずきを記録し、後から手順を改善する
 
 提案日：2026年11月7日。

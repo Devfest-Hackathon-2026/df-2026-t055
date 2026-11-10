@@ -1,3 +1,10 @@
+---
+type: Historical Record
+title: 11A：本人に合わせた作業手順の提示
+authority: historical
+status: deprecated
+---
+
 # 11A：本人に合わせた作業手順の提示
 
 > **採択時点の記録（現行仕様ではありません）**：ここにある企画意図や当時の対象範囲は歴史資料です。現在のターゲット、画面・API・承認条件は [現行仕様書](../../PRODUCT_SPEC.md) を参照してください。

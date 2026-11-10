@@ -1,3 +1,10 @@
+---
+type: Implementation Audit
+title: 改善生成の受付監査
+authority: evidence
+status: stable
+---
+
 # 改善生成の受付監査
 
 - 対象 #64。先行 #47、#50 に基づき、#59 の記録一覧と組み合わせる。元の次回割当版、同じ所属・本人・作業の記録と最新revisionを受付トランザクションで確認し、職員が確認した要約と記録版をジョブへ固定する。

@@ -1,3 +1,10 @@
+---
+type: Historical Record
+title: 支援計画の本人意向と根拠の照合
+authority: historical
+status: deprecated
+---
+
 # 支援計画の本人意向と根拠の照合
 
 - 投稿: サブエージェントによる検討で具体化した案

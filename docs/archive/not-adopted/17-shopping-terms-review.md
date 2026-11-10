@@ -1,3 +1,10 @@
+---
+type: Historical Record
+title: 通販の購入条件を読み合わせる
+authority: historical
+status: deprecated
+---
+
 # 通販の購入条件を読み合わせる
 
 - 投稿: 2回目の調査で具体化した案

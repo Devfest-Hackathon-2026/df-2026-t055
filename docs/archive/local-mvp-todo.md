@@ -1,3 +1,10 @@
+---
+type: Historical Record
+title: 仮定と残作業
+authority: historical
+status: deprecated
+---
+
 # 仮定と残作業
 
 - 仮定: ローカルは単一APIプロセス内のインメモリDBと非公開ローカルStorageを使う。再起動するとデータを消去する。generatorはAPIの内部実行口をHTTPで呼び、DBを共有する。GCPではRepository/Storage/Auth/Queueアダプタを置換する。

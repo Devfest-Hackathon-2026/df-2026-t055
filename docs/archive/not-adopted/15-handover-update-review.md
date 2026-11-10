@@ -1,3 +1,10 @@
+---
+type: Historical Record
+title: 新しい記録による引き継ぎ内容の見直し
+authority: historical
+status: deprecated
+---
+
 # 新しい記録による引き継ぎ内容の見直し
 
 - 投稿: サブエージェントによる検討で具体化した案

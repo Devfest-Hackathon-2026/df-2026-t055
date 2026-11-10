@@ -6,7 +6,7 @@ const root = new URL('../packages/shared/fixtures/work-guides/', import.meta.url
 const fixture = (name: string): any =>
   JSON.parse(readFileSync(new URL(`${name}.json`, root), 'utf8'));
 const examples = readFileSync(
-  new URL('../packages/shared/api-examples/work-guides.md', import.meta.url),
+  new URL('../docs/contracts/examples/work-guides.md', import.meta.url),
   'utf8',
 );
 const valid = {
