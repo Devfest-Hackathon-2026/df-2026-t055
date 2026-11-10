@@ -449,6 +449,10 @@ for (const [status, supportStatus, label] of [
     const tree = h.render();
     checkState(tree, label);
     if (status !== 'active') assert.doesNotMatch(text(tree), /折る/);
+    if (status === 'completed') {
+      assert.match(text(tree), /職員に しらせました/);
+      assert.doesNotMatch(text(tree), /職員をよんでください/);
+    }
     hooks.reset();
   });
 }

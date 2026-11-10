@@ -173,6 +173,55 @@ test('担当外には操作を出さず、担当中は完了と本人確認後�
   hooks.reset();
 });
 
+test('完了通知は「おわった」と確認ボタンだけを出し、確認で acknowledge を呼ぶ', async () => {
+  hooks.reset();
+  const done = { ...base, requestId: 'done', kind: 'complete', status: 'open' };
+  const calls: any[] = [];
+  const api = async (path: string, method = 'GET', body?: unknown) => {
+    calls.push({ path, method, body });
+    if (path === '/staff/me') return { schemaVersion: '1', uid: 'staff' };
+    if (path === '/learners')
+      return {
+        items: [
+          {
+            schemaVersion: '1',
+            learnerId: 'a',
+            displayName: '本人A',
+            preferences: {},
+            revision: 1,
+          },
+        ],
+      };
+    if (path === '/support-requests') return { requests: [done] };
+    if (path === '/support-requests?status=acknowledged') return { requests: [] };
+    return {};
+  };
+  const subscribe = () => () => {};
+  const render = () => {
+    hooks.begin();
+    return StaffSupport({ api, subscribe });
+  };
+  render();
+  await hooks.flush();
+  await settle();
+  let tree = render();
+  const section = nodes(tree).find((n) => n.type === 'section');
+  const label = text(section);
+  assert.match(label, /おわった：/);
+  assert.match(label, /確認待ち/);
+  assert.doesNotMatch(label, /手伝って|対応待ち|担当する|対応を始める|支援記録/);
+  assert.ok(nodes(section).some((n) => n.props?.className?.includes('badge-ok')));
+  const button = nodes(section).find((n) => n.type === 'button');
+  assert.equal(text(button), '完了を確認した');
+  assert.equal(nodes(section).filter((n) => n.type === 'button').length, 1);
+  button.props.onClick();
+  await settle();
+  const call = calls.find((c) => c.path === '/support-requests/done/acknowledge');
+  assert.ok(call);
+  assert.equal(call.method, 'POST');
+  hooks.reset();
+});
+
 test('本人名の取得が失敗または応答待ちでも一覧と記録の対象をIDで表示する', async () => {
   for (const unavailable of ['failure', 'pending', 'missing']) {
     hooks.reset();
