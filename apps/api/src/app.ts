@@ -53,6 +53,7 @@ import {
   MemoryRepository,
   seed,
   doc,
+  downloadTo,
   id,
   now,
   type Repository,
@@ -64,7 +65,10 @@ import { configuredAuth, AuthServiceUnavailableError } from './firebase-auth.ts'
 import { configuredStorage } from './cloud-storage.ts';
 import { configuredRepository } from './firestore-repository.ts';
 import { configuredTts, type TtsAdapter } from './tts.ts';
-import { media } from './media.ts';
+import { media, probeFile, frameFromFile } from './media.ts';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { GenerationQueue } from './cloud-tasks.ts';
 import { generationEnabled } from './generation-control.ts';
 import { frozenCorrections } from './correction-input.ts';
@@ -81,13 +85,20 @@ export class HttpError extends Error {
   constructor(
     public status: number,
     public code: string,
+    // Extra fields placed inside `error` beside code/message/requestId. Only safe values.
+    public extra?: Record<string, number>,
   ) {
     super(code);
   }
 }
-export function fail(status: number, code: string): never {
-  throw new HttpError(status, code);
+export function fail(status: number, code: string, extra?: Record<string, number>): never {
+  throw new HttpError(status, code, extra);
 }
+export const VIDEO_UPLOAD_MAX_BYTES = 500 * 1024 * 1024;
+export const VIDEO_UPLOAD_CHUNK_BYTES = 8 * 1024 * 1024;
+// A crashed request must not hold an upload forever; Cloud Run times requests out at 300s.
+const VIDEO_UPLOAD_LOCK_MS = 5 * 60 * 1000;
+const videoUploadChunkPath = /^\/api\/v1\/tasks\/[^/]+\/video-uploads\/[^/]+$/;
 function learnerProfileDetail(d: Doc) {
   return learnerProfileDetailSchema.parse({
     schemaVersion: '1',
@@ -133,6 +144,8 @@ export function createApp(
     promptVersion?: string;
     runJob?: (jobId: string) => Promise<unknown>;
     queue?: GenerationQueue;
+    // Tests inject a small chunk size; production uses 8MiB to stay under Cloud Run's 32MiB.
+    videoUploadChunkSize?: number;
   } = {},
 ) {
   const modelConfig = configuredModelConfig();
@@ -146,6 +159,8 @@ export function createApp(
   app.upgrade = notifications.upgrade;
   const limit = options.globalLimit ?? Number(process.env.GENERATION_GLOBAL_LIMIT ?? 30);
   if (!Number.isInteger(limit) || limit < 0) throw Error('INVALID_GENERATION_GLOBAL_LIMIT');
+  const chunkSize = options.videoUploadChunkSize ?? VIDEO_UPLOAD_CHUNK_BYTES;
+  if (!Number.isSafeInteger(chunkSize) || chunkSize <= 0) throw Error('INVALID_VIDEO_UPLOAD_CHUNK');
   const internalToken =
     options.internalToken ?? process.env.INTERNAL_TOKEN ?? 'local-generator-only';
   app.use((req: Request, res: Response, next: NextFunction) => {
@@ -177,7 +192,12 @@ export function createApp(
           origin !== `http://${req.headers.host}`
         )
           fail(403, 'ORIGIN');
-        if (!req.is('application/json') && !req.is('multipart/form-data'))
+        const chunk = req.method === 'PUT' && videoUploadChunkPath.test(req.path);
+        if (
+          chunk
+            ? !req.is('application/octet-stream')
+            : !req.is('application/json') && !req.is('multipart/form-data')
+        )
           fail(422, 'CONTENT_TYPE');
       }
       next();
@@ -359,6 +379,164 @@ export function createApp(
       await db.put('tasks', { ...fresh, videoAssetId: a.id, status: 'ready' });
     });
     send(res, { assetId: a.id, status: 'ready' });
+  });
+  // Chunked upload: each chunk is authenticated and authorized here before reaching Storage.
+  // The resumable session stays in the record; responses and logs never include it.
+  const videoUpload = async (req: Request, res: Response) => {
+    staff(res);
+    const t = await get('tasks', req.params.id, res);
+    const u = await get('videoUploads', req.params.uploadId, res);
+    if (u.taskId !== t.id) fail(404, 'NOT_FOUND');
+    if (u.createdBy !== member(res).uid) fail(403, 'UPLOAD_FORBIDDEN');
+    return u;
+  };
+  const uploads = () => {
+    const { startUpload, appendUpload, remove } = storage;
+    if (!startUpload || !appendUpload || !remove) fail(503, 'UPLOAD_UNAVAILABLE');
+    return {
+      startUpload: startUpload.bind(storage),
+      appendUpload: appendUpload.bind(storage),
+      remove: remove.bind(storage),
+    };
+  };
+  const locked = (u: Doc) => typeof u.lockUntil === 'number' && u.lockUntil > Date.now();
+  // Release the lock this request holds, optionally applying changes; no-op if it lost the lock.
+  const settleUpload = (uploadId: string, token: string, changes: Record<string, unknown> = {}) =>
+    db.transaction(async () => {
+      const current = await db.get('videoUploads', uploadId);
+      if (!current || current.lockToken !== token) return false;
+      const { lockToken: _token, lockUntil: _until, ...rest } = current;
+      await db.put('videoUploads', { ...rest, ...changes } as Doc);
+      return true;
+    });
+  api.post('/tasks/:id/video-uploads', async (req, res) => {
+    staff(res);
+    const { size } = z.object({ size: z.number().int().positive() }).strict().parse(req.body);
+    if (size > VIDEO_UPLOAD_MAX_BYTES) fail(422, 'VIDEO_TOO_LARGE');
+    const t = await get('tasks', req.params.id, res);
+    if (t.status !== 'uploading') fail(409, 'VIDEO_IMMUTABLE');
+    const objectPath = `source/${t.orgId}/${t.id}/${id()}.mp4`;
+    const session = await uploads().startUpload(objectPath, size);
+    const u = doc(t.orgId, {
+      taskId: t.id,
+      createdBy: member(res).uid,
+      size,
+      received: 0,
+      objectPath,
+      session,
+      status: 'uploading',
+    });
+    await db.put('videoUploads', u);
+    send(res, { uploadId: u.id, chunkSize });
+  });
+  api.put('/tasks/:id/video-uploads/:uploadId', async (req, res) => {
+    const u = await videoUpload(req, res);
+    const range = /^bytes ([0-9]{1,16})-([0-9]{1,16})\/([0-9]{1,16})$/.exec(
+      String(req.headers['content-range'] ?? ''),
+    );
+    const [start, end, total] = (range ?? ['', '-1', '-1', '-1']).slice(1).map(Number);
+    const bytes = req.rawBody;
+    if (
+      !range ||
+      total !== u.size ||
+      end < start ||
+      end >= total ||
+      end - start + 1 !== bytes.length ||
+      (end + 1 === total ? bytes.length > chunkSize : bytes.length !== chunkSize)
+    )
+      fail(422, 'INVALID_UPLOAD_CHUNK');
+    const token = id();
+    // Claim the offset atomically. A concurrent PUT for the same upload sees the lock and gets
+    // 409 with the committed offset, so one chunk is never sent to Storage twice at once.
+    const claimed = await db.transaction(async () => {
+      const current = (await db.get('videoUploads', u.id))!;
+      const task = await get('tasks', current.taskId, res);
+      if (current.status !== 'uploading' || task.status !== 'uploading')
+        fail(409, 'VIDEO_IMMUTABLE');
+      if (locked(current) || start !== current.received)
+        fail(409, 'UPLOAD_OFFSET_MISMATCH', { received: current.received });
+      await db.put('videoUploads', {
+        ...current,
+        lockToken: token,
+        lockUntil: Date.now() + VIDEO_UPLOAD_LOCK_MS,
+      });
+      return current;
+    });
+    let progress;
+    try {
+      progress = await uploads().appendUpload(claimed.session, start, bytes, total);
+    } catch (e) {
+      await settleUpload(u.id, token);
+      throw e;
+    }
+    const received = Math.min(progress.received, total);
+    const saved = await settleUpload(u.id, token, {
+      received,
+      ...(progress.generation === undefined ? {} : { generation: progress.generation }),
+    });
+    if (!saved) fail(409, 'UPLOAD_OFFSET_MISMATCH', { received: claimed.received });
+    send(res, { received });
+  });
+  api.post('/tasks/:id/video-uploads/:uploadId/complete', async (req, res) => {
+    const u = await videoUpload(req, res);
+    const token = id();
+    const claimed = await db.transaction(async () => {
+      const current = (await db.get('videoUploads', u.id))!;
+      const task = await get('tasks', current.taskId, res);
+      if (current.status !== 'uploading' || task.status !== 'uploading' || locked(current))
+        fail(409, 'VIDEO_IMMUTABLE');
+      if (current.received !== current.size) fail(409, 'UPLOAD_INCOMPLETE');
+      await db.put('videoUploads', {
+        ...current,
+        lockToken: token,
+        lockUntil: Date.now() + VIDEO_UPLOAD_LOCK_MS,
+      });
+      return current;
+    });
+    const dir = await mkdtemp(join(tmpdir(), 't055-upload-'));
+    try {
+      const file = join(dir, 'input.mp4');
+      await downloadTo(storage, claimed.objectPath, claimed.generation, file);
+      let durationMs: number | undefined;
+      try {
+        ({ durationMs } = await probeFile(file));
+      } catch {
+        // Delete the exact generation that was inspected, then close this upload.
+        await uploads().remove(claimed.objectPath, claimed.generation);
+        await settleUpload(u.id, token, { status: 'rejected' });
+        fail(422, 'INVALID_VIDEO');
+      }
+      const a = doc(claimed.orgId, {
+        kind: 'video',
+        objectPath: claimed.objectPath,
+        generation: claimed.generation ?? 1,
+        mimeType: 'video/mp4',
+        durationMs,
+        visibility: 'staff',
+      });
+      const ready = await db.transaction(async () => {
+        const current = await db.get('videoUploads', u.id);
+        const fresh = await get('tasks', claimed.taskId, res);
+        if (!current || current.lockToken !== token || fresh.status !== 'uploading') return false;
+        const { lockToken: _token, lockUntil: _until, ...rest } = current;
+        await db.put('assets', a);
+        await db.put('tasks', { ...fresh, videoAssetId: a.id, status: 'ready' });
+        await db.put('videoUploads', { ...rest, status: 'completed', assetId: a.id } as Doc);
+        return true;
+      });
+      if (!ready) {
+        // Another upload made the task ready first; do not leave this object unreferenced.
+        await uploads().remove(claimed.objectPath, claimed.generation);
+        await settleUpload(u.id, token, { status: 'rejected' });
+        fail(409, 'VIDEO_IMMUTABLE');
+      }
+      send(res, { assetId: a.id, status: 'ready' });
+    } catch (e) {
+      await settleUpload(u.id, token).catch(() => {});
+      throw e;
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
   api.post('/learners', async (req, res) => {
     staff(res);
@@ -966,10 +1144,15 @@ export function createApp(
     const t = await get('tasks', d.taskId, res),
       v = await get('assets', t.videoAssetId, res);
     let image;
+    const dir = await mkdtemp(join(tmpdir(), 't055-frames-'));
     try {
-      ({ image } = await media(await storage.get(v.objectPath, v.generation), frameMs));
+      const file = join(dir, 'input.mp4');
+      await downloadTo(storage, v.objectPath, v.generation, file);
+      ({ image } = await frameFromFile(file, frameMs));
     } catch {
       fail(422, 'INVALID_FRAME');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
     }
     const a = doc(d.orgId, {
       kind: 'image',
@@ -1744,6 +1927,7 @@ export function createApp(
               ? '処理に失敗しました'
               : '操作を確認してください',
         requestId: res.locals.requestId,
+        ...(err instanceof HttpError && status !== 500 ? err.extra : {}),
       },
     });
   });

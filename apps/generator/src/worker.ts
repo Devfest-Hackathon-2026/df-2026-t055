@@ -1,5 +1,15 @@
-import { doc, now, type Repository, type Storage, type Doc } from '../../api/src/adapters.ts';
-import { media } from '../../api/src/media.ts';
+import {
+  doc,
+  now,
+  downloadTo,
+  type Repository,
+  type Storage,
+  type Doc,
+} from '../../api/src/adapters.ts';
+import { frameFromFile } from '../../api/src/media.ts';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { EditedStep } from '../../../packages/shared/src/index.ts';
 import { validateProposal, type VideoModel } from './model.ts';
 import {
@@ -207,41 +217,48 @@ export function createWorker(
       errorCode = 'GENERATION_FAILED';
       const editedSteps: EditedStep[] = [];
       const assets: Doc[] = [];
-      const video = await storage.get(v.objectPath, v.generation);
-      for (const s of proposal.steps) {
-        if (Date.now() - started > 230000) {
-          errorCode = 'JOB_TIMEOUT';
-          throw Error('JOB_TIMEOUT');
+      // Write the source video to local disk once and reuse it for every step's frame.
+      const dir = await mkdtemp(join(tmpdir(), 't055-job-'));
+      try {
+        const video = join(dir, 'input.mp4');
+        await downloadTo(storage, v.objectPath, v.generation, video);
+        for (const s of proposal.steps) {
+          if (Date.now() - started > 230000) {
+            errorCode = 'JOB_TIMEOUT';
+            throw Error('JOB_TIMEOUT');
+          }
+          errorCode = 'FRAME_EXTRACTION_FAILED';
+          const { image } = await frameFromFile(video, s.frameMs);
+          if (!image?.length) throw Error('FRAME_EXTRACTION_FAILED');
+          errorCode = 'GENERATION_FAILED';
+          const a = doc(d.orgId, {
+            kind: 'image',
+            objectPath: `draft/${d.orgId}/${d.id}/${crypto.randomUUID()}.jpg`,
+            generation: 1,
+            mimeType: 'image/jpeg',
+            sourceVideoId: v.id,
+            frameMs: s.frameMs,
+            draftId: d.id,
+            visibility: 'staff',
+          });
+          a.generation = (await storage.put(a.objectPath, image)) ?? a.generation;
+          assets.push(a);
+          editedSteps.push({
+            stepId: s.stepId,
+            text: s.instructionDraft,
+            visibleCaution: '',
+            imageAssetId: a.id,
+            sourceStartMs: s.startMs,
+            sourceEndMs: s.endMs,
+            frameMs: s.frameMs,
+            verifiedObservation: s.observationCandidate,
+            verifiedSpeech: s.speechCandidate,
+            coaching: s.coachingDraft,
+            completionCheck: s.completionCheckDraft,
+          });
         }
-        errorCode = 'FRAME_EXTRACTION_FAILED';
-        const { image } = await media(video, s.frameMs);
-        if (!image?.length) throw Error('FRAME_EXTRACTION_FAILED');
-        errorCode = 'GENERATION_FAILED';
-        const a = doc(d.orgId, {
-          kind: 'image',
-          objectPath: `draft/${d.orgId}/${d.id}/${crypto.randomUUID()}.jpg`,
-          generation: 1,
-          mimeType: 'image/jpeg',
-          sourceVideoId: v.id,
-          frameMs: s.frameMs,
-          draftId: d.id,
-          visibility: 'staff',
-        });
-        a.generation = (await storage.put(a.objectPath, image)) ?? a.generation;
-        assets.push(a);
-        editedSteps.push({
-          stepId: s.stepId,
-          text: s.instructionDraft,
-          visibleCaution: '',
-          imageAssetId: a.id,
-          sourceStartMs: s.startMs,
-          sourceEndMs: s.endMs,
-          frameMs: s.frameMs,
-          verifiedObservation: s.observationCandidate,
-          verifiedSpeech: s.speechCandidate,
-          coaching: s.coachingDraft,
-          completionCheck: s.completionCheckDraft,
-        });
+      } finally {
+        await rm(dir, { recursive: true, force: true });
       }
       await db.transaction(async () => {
         const current = (await db.get('generationJobs', jobId))!;

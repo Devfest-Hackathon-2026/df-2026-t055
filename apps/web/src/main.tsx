@@ -26,6 +26,7 @@ import { StaffLearners } from './staff-learners.tsx';
 import { StaffSupport } from './staff-support.tsx';
 import { StatusBadge, badgeKindOf } from './status-badge.tsx';
 import { createTokenProvider } from './auth.ts';
+import { VideoUploadError, progressLabel, tooLargeMessage, uploadVideo } from './video-upload.ts';
 import { createFirebaseSession } from './firebase-session.ts';
 import { subscribeSupport } from './support-ws.ts';
 import { learnerSupportNotificationSchema } from '../../../packages/shared/src/support.ts';
@@ -85,22 +86,24 @@ const subscribeStaffSupport = (
   receive: (value: unknown) => void,
   status: (connected: boolean) => void,
 ) => subscribeSupport(getToken, undefined, receive, status);
-async function api(path: string, method = 'GET', body?: unknown) {
+async function api(path: string, method = 'GET', body?: unknown, headers?: Record<string, string>) {
+  const raw = body instanceof FormData || body instanceof Blob;
   const r = await fetch(`/api/v1${path}`, {
     method,
     headers: {
       Authorization: `Bearer ${await getToken()}`,
-      ...(body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+      ...(raw ? {} : { 'Content-Type': 'application/json' }),
+      ...headers,
     },
-    ...(body === undefined ? {} : { body: body instanceof FormData ? body : JSON.stringify(body) }),
+    ...(body === undefined ? {} : { body: raw ? body : JSON.stringify(body) }),
   });
-  const data = await r.json();
+  const data = await r.json().catch(() => ({}));
   if (!r.ok)
     throw Object.assign(
       Error(
         `${data.error?.code ?? r.status}：${r.status === 409 ? '状態が変わりました。再取得してください' : (data.error?.message ?? '通信を確認してください')}`,
       ),
-      { status: r.status, code: data.error?.code },
+      { status: r.status, code: data.error?.code, body: data },
     );
   return data;
 }
@@ -457,7 +460,8 @@ function Staff({ path, action }: { path: string; action: Action }) {
     [chosen, setChosen] = useState('a'),
     [title, setTitle] = useState('タオル折り・紙巻き・袋入れ'),
     [file, setFile] = useState<File | null>(null),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [received, setReceived] = useState<number | null>(null);
   useEffect(() => {
     void action(async () => {
       setTasks((await api('/tasks')).tasks);
@@ -468,6 +472,11 @@ function Staff({ path, action }: { path: string; action: Action }) {
       );
     });
   }, [path]);
+  const uploadNote = busy
+    ? '送信中です。終わるまで、もう一度押すことはできません。'
+    : !file
+      ? '動画を選ぶと登録できます。'
+      : tooLargeMessage(file);
   const draftMatch = path.match(/\/drafts\/([^/]+)/);
   // 職員画面はパスで振り分ける。新しい画面はここへ追加し、既存の分岐は残す。
   if (draftMatch) return <Draft key={draftMatch[1]} id={draftMatch[1]} action={action} />;
@@ -494,7 +503,7 @@ function Staff({ path, action }: { path: string; action: Action }) {
             <input value={title} onChange={(e) => setTitle(e.target.value)} />
           </label>
           <label>
-            MP4（音声付き・50MB / 180秒以内）
+            MP4（音声付き・500MB / 180秒以内）
             <input
               type='file'
               accept='video/mp4'
@@ -503,24 +512,43 @@ function Staff({ path, action }: { path: string; action: Action }) {
           </label>
           <button
             className='primary'
-            disabled={!file || busy}
+            disabled={!file || busy || !!tooLargeMessage(file)}
+            aria-describedby={uploadNote ? 'upload-disabled-reason' : undefined}
             onClick={() =>
               void action(async () => {
+                const tooLarge = file ? tooLargeMessage(file) : '';
+                if (tooLarge) throw new VideoUploadError(tooLarge);
                 setBusy(true);
+                setReceived(0);
                 try {
                   const { taskId } = await api('/tasks', 'POST', { title });
-                  const form = new FormData();
-                  form.append('video', file!);
-                  await api(`/tasks/${taskId}/video`, 'POST', form);
+                  await uploadVideo({
+                    api,
+                    taskId,
+                    file: file!,
+                    onProgress: (done) => setReceived(done),
+                  });
                   go('/staff');
                 } finally {
                   setBusy(false);
+                  setReceived(null);
                 }
               })
             }
           >
-            {busy ? '動画を検査しています…' : '動画を登録する'}
+            {busy
+              ? received !== null && file && received >= file.size
+                ? '動画を検査しています…'
+                : '動画を送信しています…'
+              : '動画を登録する'}
           </button>
+          {uploadNote && <p id='upload-disabled-reason'>{uploadNote}</p>}
+          {busy && received !== null && file && (
+            <p role='status'>
+              <progress value={received} max={file.size} aria-label='動画のアップロード' />{' '}
+              {received >= file.size ? '動画を検査しています' : progressLabel(received, file.size)}
+            </p>
+          )}
         </section>
       ) : (
         <>

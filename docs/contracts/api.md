@@ -14,7 +14,10 @@ status: stable
 | メソッド・パス | 利用者 | 入力 → 出力・処理 |
 | --- | --- | --- |
 | `POST /tasks` | 職員 | `{title}` → `{taskId}` |
-| `POST /tasks/{id}/video` | 職員 | multipart MP4 → `{assetId,status:"ready"}`。上限50MB・180秒、音声付き、実体形式を検査 |
+| `POST /tasks/{id}/video` | 職員 | multipart MP4 → `{assetId,status:"ready"}`。小さいファイル用。上限50MB・180秒、音声付き、実体形式を検査 |
+| `POST /tasks/{id}/video-uploads` | 職員 | `{size}` → `{uploadId,chunkSize:8388608}`。分割アップロードを開始する。sizeは1〜524288000（500MiB）の整数、超過は422 `VIDEO_TOO_LARGE`。作業がuploadingでなければ409 `VIDEO_IMMUTABLE` |
+| `PUT /tasks/{id}/video-uploads/{uploadId}` | 作成した職員 | `application/octet-stream` と `Content-Range: bytes start-end/total` → `{received}`。最後以外はchunkSizeちょうど、最後は残り全部。totalはsizeと一致。違反は422 `INVALID_UPLOAD_CHUNK`。startが受信済み量と違う場合や同じアップロードへの送信が処理中の場合は409 `UPLOAD_OFFSET_MISMATCH` で `{error:{code,message,requestId,received}}` を返し、receivedから再開する。分割ごとに認証・所属・作業・作成者を検査する |
+| `POST /tasks/{id}/video-uploads/{uploadId}/complete` | 作成した職員 | `{}` → `{assetId,status:"ready"}`。未受信が残れば409 `UPLOAD_INCOMPLETE`、完了・不合格済み・作業がuploadingでない・処理中は409 `VIDEO_IMMUTABLE`。保存した世代を一時ファイルへストリームで書き出し、MP4・映像と音声・180秒以内を検査する。不合格は世代を指定して削除し422 `INVALID_VIDEO`。上限500MiB・180秒 |
 | `GET /tasks` / `GET /tasks/{id}` | 職員 | 一覧／作業メタデータ |
 | `GET /learners` / `GET /learners/{id}` | 職員 | 同じ所属のプロフィールの一覧／詳細。障害に関する任意項目は詳細でのみ返す |
 | `POST /learners` / `PATCH /learners/{id}` | 職員 | 表示名、本人の希望、提示設定、確認済みの配慮、任意の記録を登録／更新。更新は `expectedRevision` を検査し、`disabilityInfo: null` で任意項目を消せる。登録は認証アカウントの作成と分ける |
