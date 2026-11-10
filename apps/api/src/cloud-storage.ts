@@ -1,4 +1,4 @@
-import { LocalStorage, type Storage } from './adapters.ts';
+import { LocalStorage, writeStreamToFile, type Storage } from './adapters.ts';
 import { GoogleStorageClient } from './google-storage.ts';
 
 // The binding must enforce these conditions atomically on Cloud Storage requests.
@@ -21,6 +21,20 @@ export interface CloudStorageClient {
     to: string,
     options: { ifSourceGenerationMatch: string; ifGenerationMatch: '0' },
   ): Promise<string>;
+  // Returns the resumable session URI. It is a bearer capability: keep it server-side only.
+  startUpload(
+    bucket: string,
+    path: string,
+    size: number,
+    options: { ifGenerationMatch: '0' },
+  ): Promise<string>;
+  appendUpload(
+    session: string,
+    start: number,
+    bytes: Buffer,
+    total: number,
+  ): Promise<{ received: number; generation?: string }>;
+  remove(bucket: string, path: string, options: { ifGenerationMatch: string }): Promise<void>;
 }
 function objectPath(path: string) {
   if (
@@ -66,6 +80,26 @@ export class CloudStorage implements Storage {
         ifGenerationMatch: '0',
       }),
     );
+  }
+  async startUpload(path: string, size: number) {
+    if (!Number.isSafeInteger(size) || size <= 0) throw Error('INVALID_UPLOAD_SIZE');
+    return this.client.startUpload(this.bucket, objectPath(path), size, {
+      ifGenerationMatch: '0',
+    });
+  }
+  async appendUpload(session: string, start: number, bytes: Buffer, total: number) {
+    const result = await this.client.appendUpload(session, start, bytes, total);
+    return result.generation === undefined
+      ? { received: result.received }
+      : { received: result.received, generation: pinned(result.generation) };
+  }
+  async remove(path: string, generation?: string | number) {
+    await this.client.remove(this.bucket, objectPath(path), {
+      ifGenerationMatch: pinned(generation),
+    });
+  }
+  async download(path: string, generation: string | number | undefined, filePath: string) {
+    await writeStreamToFile(await this.open(path, generation), filePath);
   }
   // Internal model input only; never include this URI in browser responses.
   privateUri(path: string) {

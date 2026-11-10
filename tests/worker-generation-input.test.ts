@@ -7,7 +7,13 @@ const exec = promisify(execFile);
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MemoryRepository, seed, doc, type Storage } from '../apps/api/src/adapters.ts';
+import {
+  MemoryRepository,
+  seed,
+  doc,
+  writeStreamToFile,
+  type Storage,
+} from '../apps/api/src/adapters.ts';
 import { createApp } from '../apps/api/src/app.ts';
 import { createWorker } from '../apps/generator/src/worker.ts';
 import type { ModelInput, VideoModel } from '../apps/generator/src/model.ts';
@@ -27,6 +33,18 @@ class TestStorage implements Storage {
   }
   async copy(a: string, b: string) {
     await this.put(b, await this.get(a));
+  }
+  async startUpload(): Promise<string> {
+    throw Error('UNSUPPORTED');
+  }
+  async appendUpload(): Promise<{ received: number }> {
+    throw Error('UNSUPPORTED');
+  }
+  async remove(p: string) {
+    this.data.delete(p);
+  }
+  async download(p: string, _generation: unknown, filePath: string) {
+    await writeStreamToFile(await this.open(p), filePath);
   }
 }
 
