@@ -869,6 +869,7 @@ test('生成前のボタンはモデルを断定せず、作業一覧のFake表�
                     {
                       jobId: 'job',
                       draftId: 'draft',
+                      learnerId: 'a',
                       status: 'succeeded',
                       modelId,
                       displayName: 'Vertex生成成功',
@@ -890,4 +891,58 @@ test('生成前のボタンはモデルを断定せず、作業一覧のFake表�
     assert.equal(text(tree).includes('開発用Fake'), modelId === 'fake-fixture');
     assert.doesNotMatch(text(tree), /Vertex生成成功/);
   }
+});
+
+test('作業一覧は生成状態を日本語で示し、各ジョブの対象本人と下書きを区別する', async () => {
+  hooks.reset();
+  const db = new MemoryRepository();
+  seed(db);
+  db.put('tasks', doc('demo', { id: 'task', title: '作業', status: 'ready' }));
+  const jobs = [
+    { id: 'queued', status: 'queued', learnerId: 'a' },
+    { id: 'running', status: 'running', learnerId: 'b' },
+    { id: 'success-a', status: 'succeeded', learnerId: 'a', modelId: 'fake-fixture' },
+    { id: 'success-b', status: 'succeeded', learnerId: 'b' },
+    { id: 'failed', status: 'failed', learnerId: 'missing-learner' },
+  ];
+  for (const job of jobs)
+    db.put(
+      'generationJobs',
+      doc('demo', { ...job, taskId: 'task', draftId: `draft-${job.id}`, kind: 'guide' }),
+    );
+  const { app } = createApp({ db });
+  let destination = '';
+  Object.assign(globalThis, {
+    draftApi: async (url: string) => {
+      const response = await app.fetch(
+        new Request(`http://localhost/api/v1${url}`, {
+          headers: { authorization: 'Bearer staff' },
+        }),
+      );
+      assert.equal(response.status, 200);
+      return response.json();
+    },
+    draftGo: (path: string) => {
+      destination = path;
+    },
+  });
+  const render = () => {
+    hooks.begin();
+    return Staff({ path: '/staff', action: async (fn: any) => fn() });
+  };
+  render();
+  await hooks.flush();
+  const rows = nodes(render()).filter((n) => n.type === 'p' && text(n).startsWith('生成状態：'));
+  assert.deepEqual(rows.map(text), [
+    '生成状態：生成待ち（対象：Aさん） 下書きを開く',
+    '生成状態：生成中（対象：Bさん） 下書きを開く',
+    '生成状態：生成完了（対象：Aさん）（開発用Fake） 下書きを開く',
+    '生成状態：生成完了（対象：Bさん） 下書きを開く',
+    '生成状態：生成失敗（対象：missing-learner） 下書きを開く',
+  ]);
+  rows.forEach((row, index) => {
+    button(row, '下書きを開く').props.onClick();
+    assert.equal(destination, `/staff/tasks/task/drafts/draft-${jobs[index].id}`);
+  });
+  hooks.reset();
 });

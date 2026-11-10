@@ -320,6 +320,7 @@ export function createApp(
             .map((j) => ({
               jobId: j.id,
               draftId: j.draftId,
+              learnerId: j.learnerId,
               status: j.status,
               modelId: j.modelId,
             })),
